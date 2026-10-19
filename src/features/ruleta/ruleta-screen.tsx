@@ -215,6 +215,7 @@ export const RouletteViewHook: React.FC = () => {
 	const [finalResult, setFinalResult] = useState<string | null>(null);
 	const [isSpinning, setIsSpinning] = useState<boolean>(false);
 	const [claimCode, setClaimCode] = useState<string | null>(null);
+	const [winnerColor, setWinnerColor] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const isModalOpen = finalResult !== null;
 
@@ -288,6 +289,10 @@ export const RouletteViewHook: React.FC = () => {
 
 			// Guarda el código de reclamo
 			setClaimCode(spinData.claimCode);
+
+			// Guarda el color del premio ganador para el modal
+			const winningPrize = spinData.prizes[spinData.prizeIndex];
+			setWinnerColor(winningPrize?.backgroundColor ?? null);
 
 			// Arranca el motor con el índice ganador decidido por el servidor
 			controlsRef.current?.start(spinData.prizeIndex);
@@ -484,7 +489,12 @@ export const RouletteViewHook: React.FC = () => {
 
 			{/* Modal cuando se gana un premio */}
 			{isModalOpen && (
-				<PrizeModal prize={finalResult} onClose={() => setFinalResult(null)} />
+				<PrizeModal
+					prize={finalResult}
+					claimCode={claimCode}
+					prizeColor={winnerColor}
+					onClose={() => setFinalResult(null)}
+				/>
 			)}
 		</div>
 	);
