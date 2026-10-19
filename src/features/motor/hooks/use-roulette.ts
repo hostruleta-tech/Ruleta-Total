@@ -72,6 +72,21 @@ export const useRoulette = ({
     };
   }, [mergedOptions]);
 
+  // Mantiene los datos más recientes en refs para que la animación no se
+  // reinicie (ni vuelva a sortear el premio) cuando el componente se renderiza
+  // de nuevo, por ejemplo al refrescar los premios mientras la ruleta gira.
+  const itemsRef = useRef(items);
+  const mergedOptionsRef = useRef(mergedOptions);
+  const geometryRef = useRef(geometry);
+  const callbacksRef = useRef({ onSpinUp, onSpinDown, onSpinEnd });
+
+  useEffect(() => {
+    itemsRef.current = items;
+    mergedOptionsRef.current = mergedOptions;
+    geometryRef.current = geometry;
+    callbacksRef.current = { onSpinUp, onSpinDown, onSpinEnd };
+  });
+
   const [status, setStatus] = useState<"stop" | "running" | "ending">("stop");
 
   const onStart = useCallback(() => {
@@ -120,30 +135,31 @@ export const useRoulette = ({
   useEffect(() => {
     if (status !== "running" && status !== "ending") return;
 
+    const callbacks = callbacksRef.current;
     if (status === "running") {
-      onSpinUp?.();
+      callbacks.onSpinUp?.();
     }
     if (status === "ending") {
-      onSpinDown?.();
+      callbacks.onSpinDown?.();
     }
     const { context } = setupCanvas(canvasRef.current);
     const cancelAnimation = animateRoulette({
-      rouletteItemList: items,
-      mergedOptions,
+      rouletteItemList: itemsRef.current,
+      mergedOptions: mergedOptionsRef.current,
       context,
       status,
-      geometry,
+      geometry: geometryRef.current,
       rouletteRef,
       onFinish: (rouletteResult: string) => {
         setStatus("stop");
         resultRef.current = rouletteResult;
-        onSpinEnd?.(rouletteResult);
+        callbacksRef.current.onSpinEnd?.(rouletteResult);
       },
     });
     return () => {
       cancelAnimation();
     };
-  }, [status, geometry, items, mergedOptions, onSpinEnd, onSpinDown, onSpinUp]);
+  }, [status]);
 
   return {
     roulette: {

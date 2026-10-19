@@ -24,8 +24,11 @@ interface RouletteState {
 	timestamp: number;
 }
 
-// Reserva del marco cromado exterior (padding + bisel)
-const FRAME_PADDING = 26;
+// Grosor del marco cromado por lado (p-[14px] + p-[8px] + p-[2px]) + aire
+// lateral, para que la ruleta nunca toque ni recorte los bordes.
+const FRAME_THICKNESS = 24;
+const WHEEL_MARGIN = 8;
+const FRAME_PADDING = FRAME_THICKNESS * 2 + WHEEL_MARGIN;
 const MIN_WHEEL = 180;
 const MAX_WHEEL = 560;
 
@@ -336,8 +339,6 @@ export const RouletteViewHook: React.FC = () => {
 					backgroundPosition: "0 0, 20px 20px",
 				}}
 			/>
-			{/* DETALLE SUPERIOR EN COLOR TEAL */}
-			<div className="absolute top-0 left-0 right-0 h-2 bg-[#024a52] z-30" />
 
 			{/* IMAGEN DECORATIVA DIFUMINADA (ESQUINA SUPERIOR DERECHA) */}
 			<div
@@ -362,7 +363,7 @@ export const RouletteViewHook: React.FC = () => {
 			</div>
 
 			{/* CONTENEDOR PRINCIPAL TIPO POSTER / APP */}
-			<div className="relative z-10 w-full max-w-sm sm:max-w-md flex flex-col items-center min-h-0 flex-1 justify-center gap-3 sm:gap-4">
+			<div className="relative z-10 w-full max-w-sm sm:max-w-md flex flex-col items-center min-h-0 flex-1 justify-center gap-2 sm:gap-3">
 				{/* 1. TÍTULOS */}
 				<div className="w-full text-left shrink-0">
 					<h1 className="text-2xl sm:text-3xl font-black italic tracking-tight text-[#0a454d] leading-none">
@@ -398,14 +399,14 @@ export const RouletteViewHook: React.FC = () => {
 				</div>
 
 				{/* 3. BOTÓN DE GIRO Y TARJETA INFERIOR */}
-				<div className="w-full flex flex-col items-center gap-2.5 shrink-0 pb-1">
+				<div className="w-full flex flex-col items-center gap-2.5 shrink-0 pb-16 sm:pb-20">
 					{/* BOTÓN GIRAR RULETA */}
 					<button
 						onClick={handleLocalSpin}
 						disabled={isSpinning || !rouletteItems}
 						className={`
-							w-full max-w-[340px] py-3 px-6 rounded-full flex items-center justify-center gap-3
-							text-white font-black tracking-wider uppercase text-base sm:text-lg
+							w-full max-w-[380px] py-4 px-6 rounded-full flex items-center justify-center gap-3
+							text-white font-black tracking-wider uppercase text-lg sm:text-xl
 							shadow-[0_8px_20px_rgba(227,6,19,0.38),inset_0_2px_4px_rgba(255,255,255,0.4)]
 							transition-all duration-200 active:scale-95 active:shadow-sm
 							${
@@ -417,7 +418,7 @@ export const RouletteViewHook: React.FC = () => {
 					>
 						{/* Icono de recargar / girar con animación */}
 						<svg
-							className={`w-6 h-6 ${isSpinning ? "animate-spin" : ""}`}
+							className={`w-7 h-7 ${isSpinning ? "animate-spin" : ""}`}
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"
@@ -434,7 +435,7 @@ export const RouletteViewHook: React.FC = () => {
 					</button>
 
 					{/* TARJETA: "Tu premio aparecerá aquí" */}
-					<div className="w-full max-w-[340px] bg-white/95 border border-slate-200/90 rounded-2xl p-3 flex items-center gap-3 shadow-sm backdrop-blur-sm">
+					<div className="w-full max-w-[380px] bg-white/95 border border-slate-200/90 rounded-2xl p-3 flex items-center gap-3 shadow-sm backdrop-blur-sm">
 						{/* Icono de regalo estilizado en Teal */}
 						<div className="w-10 h-10 rounded-xl bg-[#035157]/10 flex items-center justify-center flex-shrink-0 text-[#035157]">
 							<svg

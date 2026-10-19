@@ -36,7 +36,6 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 				<div className="absolute -left-40 -top-24 h-[140%] w-[46%] bg-white/25" style={{ transform: "skewX(-18deg)" }} />
 				<div className="absolute left-[20%] -top-24 h-[140%] w-[10%] bg-white/15" style={{ transform: "skewX(-18deg)" }} />
 				<div className="absolute -right-24 -top-24 h-[140%] w-[26%] bg-white/15" style={{ transform: "skewX(-18deg)" }} />
-				<div className="absolute -left-6 bottom-0 h-40 w-3 bg-[#E52421]" style={{ transform: "skewX(-24deg)" }} />
 			</div>
 
 			<div className="relative z-10 flex-1 flex flex-col min-w-0 min-h-0">
@@ -101,31 +100,33 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 					style={{ clipPath: "polygon(0 0, calc(100% - 78px) 0, calc(100% - 80px) 100%, 0 100%)" }}
 				/>
 
-				{/* Contenido scrollable */}
-				<main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+				{/* Contenido scrollable (el footer aparece al llegar al final) */}
+				<main className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+					{children}
 
-				{/* Footer */}
-				<footer className="relative shrink-0 h-[clamp(48px,6.5vh,68px)] overflow-hidden bg-gradient-to-r from-[#004D56] to-[#00565C] text-white">
-					<div className="absolute inset-x-0 top-0 h-px bg-white/10" aria-hidden="true" />
-					<div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center" aria-hidden="true">
-						<div className="h-full w-4 -translate-x-1.5 -skew-x-12 bg-[#E52421]" />
-					</div>
-					<div className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center" aria-hidden="true">
-						<div className="h-full w-8 translate-x-2 -skew-x-12 bg-teal-200/90" />
-						<div className="h-full w-8 translate-x-4 -skew-x-12 bg-[#E52421]" />
-						<div className="h-full w-8 translate-x-6 -skew-x-12 bg-[#008087]" />
-					</div>
+					{/* Footer */}
+					<footer className="mt-auto relative h-[clamp(48px,6.5vh,68px)] overflow-hidden bg-gradient-to-r from-[#004D56] to-[#00565C] text-white">
+						<div className="absolute inset-x-0 top-0 h-px bg-white/10" aria-hidden="true" />
+						<div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center" aria-hidden="true">
+							<div className="h-full w-4 -translate-x-1.5 -skew-x-12 bg-[#E52421]" />
+						</div>
+						<div className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center" aria-hidden="true">
+							<div className="h-full w-8 translate-x-2 -skew-x-12 bg-teal-200/90" />
+							<div className="h-full w-8 translate-x-4 -skew-x-12 bg-[#E52421]" />
+							<div className="h-full w-8 translate-x-6 -skew-x-12 bg-[#008087]" />
+						</div>
 
-					<div className="relative z-10 flex h-full items-center gap-3 px-8">
-						<img
-							src={logoTotal}
-							alt="TOTAL"
-							draggable={false}
-							className="h-[clamp(15px,2.2vh,22px)] w-auto select-none object-contain"
-						/>
-						<span className="text-[13px] font-medium text-teal-100/80">One-Stop Tools Station</span>
-					</div>
-				</footer>
+						<div className="relative z-10 flex h-full items-center gap-3 px-8">
+							<img
+								src={logoTotal}
+								alt="TOTAL"
+								draggable={false}
+								className="h-[clamp(15px,2.2vh,22px)] w-auto select-none object-contain"
+							/>
+							<span className="text-[13px] font-medium text-teal-100/80">One-Stop Tools Station</span>
+						</div>
+					</footer>
+				</main>
 			</div>
 		</div>
 	);

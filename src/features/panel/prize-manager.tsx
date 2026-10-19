@@ -1,6 +1,7 @@
 import { Pencil, Plus, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { API_URL } from "@/shared/api";
+import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
 import {
@@ -36,7 +37,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const [templateName, setTemplateName] = useState("");
 	const [newPrize, setNewPrize] = useState<Omit<Prize, "id" | "roulette_id">>({
 		name: "",
-		backgroundColor: "#FFFFFF",
+		backgroundColor: GREEN_PALETTE[0],
 		probability: 10,
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -48,8 +49,14 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			try {
 				const response = await fetch(`${API_URL}/roulettes/${templateId}`);
 				const data = await response.json();
-				setPrizes(data.prizes || []);
+				const loadedPrizes: Prize[] = data.prizes || [];
+				setPrizes(loadedPrizes);
 				setTemplateName(data.name);
+				// El próximo premio arranca con el siguiente verde de la paleta.
+				setNewPrize((prev) => ({
+					...prev,
+					backgroundColor: nextGreen(loadedPrizes.length),
+				}));
 			} catch (error) {
 				console.error("Failed to fetch prizes", error);
 			}
@@ -90,7 +97,11 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				roulette_id: templateId,
 			},
 		]);
-		setNewPrize({ name: "", backgroundColor: "#FFFFFF", probability: 10 });
+		setNewPrize({
+			name: "",
+			backgroundColor: nextGreen(prizes.length + 1),
+			probability: 10,
+		});
 	};
 
 	const handleRemovePrize = (index: number) => {

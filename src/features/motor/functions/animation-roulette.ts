@@ -1,14 +1,11 @@
 import type { DefaultRouletteOptions } from "../config";
 import type { Geometry, RotationDirection, RouletteItem } from "../types";
 import { drawCanvas } from "./draw-canvas";
-import { getResultName } from "./utils";
+import { calculateTargetRotation, pickWeightedIndex } from "./utils";
 
 // Duración de un frame de referencia (60fps). Sirve para normalizar la
 // velocidad entre pantallas con distinta frecuencia de refresco.
 const FRAME_MS = 1000 / 60;
-
-// Velocidad mínima para dar el giro por terminado y evitar un frenado infinito.
-const MIN_SPEED = 0.04;
 
 const calculateSpeed = (
 	curSpeed: number,
@@ -58,10 +55,13 @@ export const animateRoulette = ({
 	let curSpeed = rouletteRef.current.speed;
 	let prevTime = 0;
 
-	// Estado del frenado suave.
+	// Estado del frenado: el ganador y el punto de aterrizaje se deciden una
+	// sola vez, al comenzar a detenerse.
 	let endingStarted = false;
-	let endingStartSpeed = 0;
 	let endingElapsed = 0;
+	let endingStartRotation = 0;
+	let endingTargetRotation = 0;
+	let endingWinnerName = "No Result";
 
 	const animate = (time: number) => {
 		const dt = prevTime ? time - prevTime : FRAME_MS;
@@ -71,24 +71,50 @@ export const animateRoulette = ({
 		const deltaFrames = Math.min(dt / FRAME_MS, 3);
 
 		if (status === "ending") {
+			const stopDuration = Math.max(1, mergedOptions.stopDuration);
+
 			if (!endingStarted) {
 				endingStarted = true;
-				endingStartSpeed = curSpeed > 0 ? curSpeed : mergedOptions.maxSpeed;
+				endingElapsed = 0;
+				endingStartRotation = rouletteRef.current.totalRotation;
+
+				const itemCount = rouletteItemList.length;
+				if (itemCount === 0) {
+					onFinish("No Result");
+					return;
+				}
+
+				// El ganador se sortea según la probabilidad (peso) de cada premio.
+				const winnerIndex = pickWeightedIndex(rouletteItemList);
+				endingWinnerName =
+					rouletteItemList[winnerIndex]?.name ?? "No Result";
+
+				const startSpeed = curSpeed > 0 ? curSpeed : mergedOptions.maxSpeed;
+				// Distancia aproximada del frenado anterior: mantiene la misma
+				// duración y sensación de giro.
+				const totalFrames = stopDuration / FRAME_MS;
+				const desiredDistance = (startSpeed * totalFrames) / 4;
+
+				endingTargetRotation = calculateTargetRotation({
+					currentRotation: endingStartRotation,
+					winnerIndex,
+					itemCount,
+					rotationDirection: mergedOptions.rotationDirection,
+					startAngle: mergedOptions.determineAngle,
+					desiredDistance,
+				});
+
+				rouletteRef.current.speed = 0;
 			}
 
 			endingElapsed += dt;
-			const progress = Math.min(endingElapsed / mergedOptions.stopDuration, 1);
-			// Frenado progresivo (ease-out cúbico): comienza con una desaceleración
-			// clara y se va suavizando hasta detenerse casi imperceptiblemente, en
-			// lugar de frenar de golpe como una desaceleración lineal.
-			const eased = (1 - progress) ** 3;
-			curSpeed = endingStartSpeed * eased;
+			const progress = Math.min(endingElapsed / stopDuration, 1);
+			// Ease-out cuártico: arranca con la velocidad actual y frena suave.
+			const eased = 1 - (1 - progress) ** 4;
 
-			rouletteRef.current.speed = curSpeed;
-			rouletteRef.current.totalRotation = getTotalRotation(
-				rouletteRef.current.totalRotation,
-				curSpeed * deltaFrames,
-			);
+			rouletteRef.current.totalRotation =
+				endingStartRotation +
+				(endingTargetRotation - endingStartRotation) * eased;
 
 			drawCanvas({
 				rouletteItemList,
@@ -98,13 +124,11 @@ export const animateRoulette = ({
 				rouletteRef,
 			});
 
-			if (progress >= 1 || curSpeed <= MIN_SPEED) {
-				const rouletteResult = getResultName({
-					rouletteItemList,
-					rotationDirection: mergedOptions.rotationDirection,
-					totalRotation: rouletteRef.current.totalRotation,
-				});
-				onFinish(rouletteResult);
+			if (progress >= 1) {
+				rouletteRef.current.totalRotation =
+					((endingTargetRotation % 360) + 360) % 360;
+				rouletteRef.current.speed = 0;
+				onFinish(endingWinnerName);
 				return;
 			}
 

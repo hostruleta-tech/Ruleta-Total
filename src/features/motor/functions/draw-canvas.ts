@@ -8,11 +8,48 @@ import type {
   StyleOptionDefault,
 } from "../types";
 
+import { isDefaultGreen } from "@/shared/prize-colors";
 import {
   calculateLabelPosition,
-  calculateTotalWeight,
+  calculateSegmentAngle,
   degreesToCanvasRadians,
 } from "./utils";
+
+/**
+ * Devuelve el color de texto con mayor contraste para un fondo dado.
+ * Fondos oscuros → texto blanco; fondos claros → texto oscuro.
+ */
+const getContrastColor = (background: string): string => {
+  const hex = background.trim().replace("#", "");
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : hex;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return "#111111";
+  }
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+
+  const channel = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+
+  const luminance =
+    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const contrastWithWhite = 1.05 / (luminance + 0.05);
+  const contrastWithBlack = (luminance + 0.05) / 0.05;
+
+  return contrastWithBlack >= contrastWithWhite ? "#111111" : "#FFFFFF";
+};
+
 interface ArrowParams {
   context: CanvasRenderingContext2D;
   geometry: Geometry;
@@ -112,7 +149,20 @@ const drawPieLabel = ({
     }
   }
 
-  context.fillText(pie.name, 0, 0);
+  // Si el nombre sigue sin caber (es muy largo), lo recortamos con elipsis.
+  let label = pie.name;
+  if (context.measureText(label).width > maxWidth) {
+    let truncated = label;
+    while (
+      truncated.length > 1 &&
+      context.measureText(`${truncated}…`).width > maxWidth
+    ) {
+      truncated = truncated.slice(0, -1);
+    }
+    label = truncated.length < pie.name.length ? `${truncated}…` : truncated;
+  }
+
+  context.fillText(label, 0, 0);
   context.restore();
 };
 
@@ -192,32 +242,27 @@ export const drawRoulette = ({
   pieList,
   style,
 }: DrawRoulette) => {
-  const weightCount = calculateTotalWeight(pieList);
-  const anglePerWeight = 360 / weightCount;
+  const itemCount = pieList.length;
+  if (itemCount === 0) return;
+
+  // Todos los sectores son iguales: la probabilidad no modifica su tamaño.
+  const anglePerSegment = calculateSegmentAngle(itemCount);
   let segmentEndAngle = (initialAngleOffset % 360) + startAngle;
 
   const resolvedPieList = pieList.map((pie, index) => {
-    const bg = pie.bg || style.pie.theme[index % style.pie.theme.length].bg;
-    const color =
-      pie.color ||
-      style.pie.theme[index % style.pie.theme.length].color ||
-      style.label.defaultColor;
-
-    const weight = pie.weight || 1;
-    const anglePerSegment = anglePerWeight * weight;
+    const theme = style.pie.theme[index % style.pie.theme.length];
+    const bg = pie.bg || theme.bg;
 
     return {
       name: pie.name,
       bg,
-      color,
-      weight,
-      anglePerWeight,
-      anglePerSegment,
+      // Los verdes de la paleta por defecto siempre llevan texto blanco;
+      // cualquier otro fondo se resuelve con auto-contraste.
+      color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
     };
   });
 
   for (const pie of resolvedPieList) {
-    const anglePerSegment = anglePerWeight * pie.weight;
     const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
     drawPie({
       context,

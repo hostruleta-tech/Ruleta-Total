@@ -58,6 +58,29 @@ export async function initializeDatabase() {
     await stmt.finalize();
     console.log('Default template created.');
   }
+
+  // Seed de la plantilla de promoción: 6 premios en tonos verdes + 1 descuento
+  // en rojo. Es idempotente por nombre: no se duplica ni se sobrescribe.
+  const promoName = 'Promoción Total Tools';
+  const promoExists = await db.get('SELECT * FROM roulettes WHERE name = ?', promoName);
+  if (!promoExists) {
+    const result = await db.run('INSERT INTO roulettes (name, is_active) VALUES (?, 0)', promoName);
+    const promoPrizes = [
+      { name: 'Premio 1', backgroundColor: '#0A4E58', probability: 10 },
+      { name: 'Premio 2', backgroundColor: '#00767C', probability: 10 },
+      { name: 'Premio 3', backgroundColor: '#008087', probability: 10 },
+      { name: 'Premio 4', backgroundColor: '#1C7C54', probability: 10 },
+      { name: 'Premio 5', backgroundColor: '#2E8B57', probability: 10 },
+      { name: 'Premio 6', backgroundColor: '#4A7C3F', probability: 10 },
+      { name: '10% de descuento', backgroundColor: '#E52421', probability: 40 },
+    ];
+    const stmt = await db.prepare('INSERT INTO prizes (roulette_id, name, backgroundColor, probability) VALUES (?, ?, ?, ?)');
+    for (const prize of promoPrizes) {
+      await stmt.run(result.lastID, prize.name, prize.backgroundColor, prize.probability);
+    }
+    await stmt.finalize();
+    console.log('Promotion template created.');
+  }
 }
 
 export const getDb = () => db;
