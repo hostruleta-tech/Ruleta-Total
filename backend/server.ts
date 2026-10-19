@@ -1,7 +1,17 @@
 import express from 'express';
 import cors from 'cors';
-import fs from 'fs';
 import path from 'path';
+import {
+  initializeDatabase,
+  getActiveRouletteWithPrizes,
+  getAllRoulettes,
+  getRouletteWithPrizes,
+  createRoulette,
+  updateRoulette,
+  deleteRoulette,
+  setActiveRoulette,
+  Prize,
+} from './database';
 
 const app = express();
 const port = 3001;
@@ -17,45 +27,6 @@ let rouletteState = {
   timestamp: Date.now(),
 };
 
-// --- Database Logic ---
-const dbPath = path.resolve(__dirname, 'db.json');
-
-interface Prize {
-  name: string;
-  backgroundColor: string;
-  probability: number;
-}
-
-interface Db {
-  prizes: Prize[];
-}
-
-let prizeConfiguration: Prize[] = [];
-
-const readDb = (): void => {
-  try {
-    const data = fs.readFileSync(dbPath, 'utf-8');
-    const db: Db = JSON.parse(data);
-    prizeConfiguration = db.prizes;
-    console.log('Prize configuration loaded from db.json');
-  } catch (error) {
-    console.error('Error reading db.json, using default. Please create db.json if it does not exist.', error);
-    prizeConfiguration = [{ name: 'Default Prize', backgroundColor: '#fff', probability: 100 }];
-  }
-};
-
-const writeDb = (data: Db): void => {
-  try {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log('db.json has been updated.');
-  } catch (error) {
-    console.error('Error writing to db.json', error);
-  }
-};
-
-// Initialize DB on startup
-readDb();
-
 // API Endpoints
 
 /**
@@ -68,21 +39,59 @@ app.get('/api/state', (req, res) => {
 
 /**
  * GET /api/configuracion
- * The admin panel uses this to get the current prize configuration.
+ * La vista de la ruleta usa esto para obtener la configuración de premios ACTIVA.
  */
-app.get('/api/configuracion', (req, res) => {
-  res.json({ prizes: prizeConfiguration });
+app.get('/api/configuracion', async (req, res) => {
+  try {
+    const activeRoulette = await getActiveRouletteWithPrizes();
+    if (!activeRoulette) {
+      return res.status(404).json({ message: 'No active roulette configuration found.' });
+    }
+    res.json({ prizes: activeRoulette.prizes });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch active configuration.' });
+  }
 });
 
 /**
- * POST /api/configuracion
- * The admin panel uses this to save the prize configuration.
+ * API para gestionar plantillas de ruleta
  */
-app.post('/api/configuracion', (req, res) => {
-  const { prizes } = req.body as { prizes: Prize[] };
-  writeDb({ prizes });
-  readDb(); // Re-read the config into memory
-  res.status(200).json({ message: 'Configuration saved successfully.' });
+app.get('/api/roulettes', async (req, res) => {
+  const roulettes = await getAllRoulettes();
+  res.json(roulettes);
+});
+
+app.get('/api/roulettes/:id', async (req, res) => {
+  const roulette = await getRouletteWithPrizes(Number(req.params.id));
+  if (!roulette) return res.status(404).json({ message: 'Roulette not found' });
+  res.json(roulette);
+});
+
+app.post('/api/roulettes', async (req, res) => {
+  const { name, prizes } = req.body;
+  const newRoulette = await createRoulette(name, prizes);
+  res.status(201).json(newRoulette);
+});
+
+app.put('/api/roulettes/:id', async (req, res) => {
+  const { name, prizes } = req.body as { name: string; prizes: Prize[] };
+  const updatedRoulette = await updateRoulette(Number(req.params.id), name, prizes);
+  res.json(updatedRoulette);
+});
+
+app.delete('/api/roulettes/:id', async (req, res) => {
+  try {
+    await deleteRoulette(Number(req.params.id));
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete roulette.';
+    res.status(400).json({ message });
+  }
+});
+
+app.post('/api/roulettes/active/:id', async (req, res) => {
+  await setActiveRoulette(Number(req.params.id));
+  res.status(200).json({ message: 'Active roulette updated.' });
 });
 
 /**
@@ -122,6 +131,8 @@ app.post('/api/command', (req, res) => {
   return res.status(400).json({ message: 'Invalid action.' });
 });
 
-app.listen(port, () => {
-  console.log(`Keyton Roulette backend server listening on http://localhost:${port}`);
+initializeDatabase().then(() => {
+  app.listen(port, () => {
+    console.log(`Keyton Roulette backend server listening on http://localhost:${port}`);
+  });
 });
