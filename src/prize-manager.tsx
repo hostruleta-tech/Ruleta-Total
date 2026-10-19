@@ -11,8 +11,7 @@ import {
 } from "./components/ui/card";
 import { TrashIcon } from "lucide-react";
 import { Label } from "./components/ui/label";
-
-const API_URL = "http://localhost:3001/api";
+import { API_URL } from "./api";
 
 export interface Prize {
 	roulette_id?: number;

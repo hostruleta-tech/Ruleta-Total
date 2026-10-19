@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { TemplateManager } from "./template-manager";
 import { Button } from "./components/ui/button";
-
-const API_URL = "http://localhost:3001/api";
+import { API_URL } from "./api";
 
 export const AdminPanel: React.FC = () => {
 	const handleCommand = async (action: "spin" | "stop") => {
@@ -39,7 +38,7 @@ export const AdminPanel: React.FC = () => {
 	const [feedback, setFeedback] = useState<string>("");
 
 	return (
-		<div className="px-4 w-full py-2 min-h-screen">
+		<div className="px-4 w-full py-2 min-h-screen max-w-4xl mx-auto">
 			<h1 className="text-3xl font-bold mb-6 mt-15">Panel de Control</h1>
 			<div className="space-y-4 max-w-md">
 				<div className="flex items-center justify-center space-x-4">

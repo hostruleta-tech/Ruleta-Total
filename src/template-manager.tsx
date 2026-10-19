@@ -12,8 +12,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "./components/ui/select";
-
-const API_URL = "http://localhost:3001/api";
+import { API_URL } from "./api";
 
 interface RouletteTemplate {
 	id: number;

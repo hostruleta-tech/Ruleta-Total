@@ -49,7 +49,7 @@ export default function Menu() {
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<p className="text-muted-foreground text-sm">
-								Controla la ruleta de forma remota desde tu dispositivo móvil
+								Controla la ruleta de forma remota desde tu dispositivo
 							</p>
 							<Button
 								className="w-full"

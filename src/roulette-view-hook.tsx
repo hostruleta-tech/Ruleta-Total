@@ -4,14 +4,13 @@ import type { RouletteItem } from "./types";
 import { Roulette } from "./components/roulette";
 import { PrizeModal } from "./prize-modal";
 import { soundManager } from "./sound-manager";
+import { API_URL } from "./api";
 
 interface RouletteState {
 	command: "stopped" | "spinning";
 	targetPrize: string | null;
 	timestamp: number;
 }
-
-const API_URL = "http://localhost:3001/api";
 
 // Hook para manejar el tamaño de la ventana
 const useWindowSize = () => {
@@ -129,7 +128,10 @@ export const RouletteViewHook: React.FC = () => {
 	}, [isModalOpen]);
 
 	return (
-		<div className="w-full h-screen flex flex-col items-center justify-center">
+		<div className="w-full h-screen flex gap-4 flex-col items-center justify-center relative">
+			<p className="font-serif text-4xl xl:text-5xl 2xl:text-6xl">
+				Lo hace posible!
+			</p>
 			{rouletteItems ? (
 				<RouletteGame
 					items={rouletteItems}

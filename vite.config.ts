@@ -1,14 +1,31 @@
-import path from "path"
-import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import path from "path";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
-})
+	base: "/ruleta/",
+	plugins: [react(), tailwindcss()],
+	resolve: {
+		alias: {
+			"@": path.resolve(__dirname, "./src"),
+		},
+	},
+	build: {
+		outDir: "dist",
+		sourcemap: false,
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					vendor: ["react", "react-dom"],
+				},
+			},
+		},
+	},
+	define: {
+		// Define global variables for the app
+		__APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+		__BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+	},
+});
