@@ -319,29 +319,19 @@ export const RouletteViewHook: React.FC = () => {
 	};
 
 	return (
-		<div className="h-[100dvh] w-full overflow-hidden bg-[#eef2f5] relative flex flex-col items-center justify-center px-3 py-3 sm:px-4">
-			{/* FONDO AMBIENTAL CON TEXTURA SUTIL TOTAL TOOLS */}
-			<div
-				className="absolute inset-0 pointer-events-none opacity-40 mix-blend-multiply"
-				style={{
-					backgroundImage:
-						"radial-gradient(#94a3b8 1px, transparent 1px), radial-gradient(#94a3b8 1px, #eef2f5 1px)",
-					backgroundSize: "40px 40px",
-					backgroundPosition: "0 0, 20px 20px",
-				}}
-			/>
+		<div className="h-[100dvh] w-full overflow-hidden bg-white relative flex flex-col items-center justify-center px-3 py-3 sm:px-4">
 
-			{/* IMAGEN DECORATIVA DIFUMINADA (ESQUINA SUPERIOR DERECHA) */}
+			{/* IMAGEN DECORATIVA DIFUMINADA (ESQUINA SUPERIOR DERECHA) - Sin cortes visibles */}
 			<div
-				className="pointer-events-none absolute -top-6 -right-8 z-0 h-[40%] w-[78%] max-w-[760px] opacity-40"
+				className="pointer-events-none absolute -top-16 -right-16 z-0 h-[55%] w-[95%] max-w-[900px] opacity-50"
 				aria-hidden="true"
 				style={{
-					filter: "blur(4px)",
-					transform: "scale(1.05)",
+					filter: "blur(14px)",
+					transform: "scale(1.12)",
 					maskImage:
-						"linear-gradient(to bottom left, #000 8%, rgba(0,0,0,0.6) 45%, transparent 88%)",
+						"radial-gradient(ellipse 80% 80% at 82% 12%, #000 30%, rgba(0,0,0,0.5) 55%, transparent 80%)",
 					WebkitMaskImage:
-						"linear-gradient(to bottom left, #000 8%, rgba(0,0,0,0.6) 45%, transparent 88%)",
+						"radial-gradient(ellipse 80% 80% at 82% 12%, #000 30%, rgba(0,0,0,0.5) 55%, transparent 80%)",
 				}}
 			>
 				<img
@@ -350,7 +340,11 @@ export const RouletteViewHook: React.FC = () => {
 					draggable={false}
 					className="h-full w-full object-cover object-center"
 				/>
-				<div className="absolute inset-0 bg-gradient-to-bl from-[#035157]/45 via-[#0a4e58]/20 to-transparent mix-blend-multiply" />
+				{/* Capas blancas de refuerzo para fundir bordes izquierdo/inferior con el fondo */}
+				<div className="absolute inset-0 bg-gradient-to-l from-white via-transparent to-transparent" />
+				<div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent" />
+				{/* Tinte teal muy sutil (15%) para integración de marca */}
+				<div className="absolute inset-0 bg-gradient-to-bl from-[#035157]/15 via-[#0a4e58]/8 to-transparent mix-blend-multiply" />
 			</div>
 
 			{/* CONTENEDOR PRINCIPAL TIPO POSTER / APP */}
