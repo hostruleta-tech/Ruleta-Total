@@ -1,0 +1,34 @@
+{
+  "prizes": [
+    {
+      "name": "Premio 1",
+      "backgroundColor": "#8A2BE2",
+      "probability": 10
+    },
+    {
+      "name": "Premio 2",
+      "backgroundColor": "#FF7F50",
+      "probability": 20
+    },
+    {
+      "name": "Premio 3",
+      "backgroundColor": "#3CB371",
+      "probability": 5
+    },
+    {
+      "name": "Inténtalo de nuevo",
+      "backgroundColor": "#DC143C",
+      "probability": 65
+    },
+    {
+      "name": "test",
+      "backgroundColor": "#FFFFFF",
+      "probability": 10
+    },
+    {
+      "name": "testing",
+      "backgroundColor": "#14ffef",
+      "probability": 10
+    }
+  ]
+}

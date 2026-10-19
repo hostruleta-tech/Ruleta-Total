@@ -1,5 +1,5 @@
 import { AdminPanel } from './admin-panel';
-import { RouletteView } from './roulette-view';
+import { RouletteViewHook } from './roulette-view-hook';
 import './App.css';
 
 function App() {
@@ -8,8 +8,11 @@ function App() {
   if (path.startsWith('/admin')) {
     return <AdminPanel />;
   }
+  if (path.startsWith('/roulette-hook')) {
+    return <RouletteViewHook />;
+  }
 
-  return <RouletteView />;
+  return <RouletteViewHook />;
 }
 
 export default App;

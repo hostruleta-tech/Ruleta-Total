@@ -2,7 +2,8 @@
 
 ## Frontend
 
-- `react-custom-roulette`: For the roulette wheel component.
+- `react-custom-roulette`: For the roulette wheel component (original implementation).
+- `react-hook-roulette`: For the alternative roulette wheel component.
 
 ## Backend
 
