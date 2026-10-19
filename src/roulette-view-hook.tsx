@@ -30,6 +30,11 @@ const RouletteGame: React.FC<{
 				arrow: {
 					bg: "#a6192e",
 				},
+				pie: {
+					borderWidth: 2,
+					borderColor: "white",
+					border: true,
+				},
 			},
 		},
 	});
