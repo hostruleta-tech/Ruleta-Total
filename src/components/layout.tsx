@@ -8,14 +8,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 	const { isMuted, toggleMute } = useSound();
 
 	const path = window.location.pathname;
-	const isAdmin = path.startsWith("/admin");
+	const isTv = path.startsWith("/tv");
 
 	return (
 		<main className="dark bg-background text-foreground min-h-screen w-full relative">
 			<header className="absolute top-0 left-0 right-0 px-2 py-2 flex justify-between items-center z-20 max-w-sm md:max-w-4xl md:mx-auto">
-				<img src={logo} width={120} alt="Logo de Keyton" height={20} />
+				<a href="/">
+					<img src={logo} width={120} alt="Logo de Keyton" height={20} />
+				</a>
 
-				{!isAdmin ? (
+				{isTv ? (
 					<div className="flex items-center gap-2 w-full justify-end">
 						<Button
 							variant="outline"
@@ -38,9 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 							{isFullscreen ? <Minimize /> : <Maximize />}
 						</Button>
 					</div>
-				) : (
-					nullAg
-				)}
+				) : null}
 			</header>
 
 			{children}

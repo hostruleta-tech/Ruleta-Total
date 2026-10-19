@@ -1,14 +1,19 @@
 import { AdminPanel } from "./admin-panel";
+import Menu from "./components/menu";
 import { RouletteViewHook } from "./roulette-view-hook";
 
 function App() {
-	const path = window.location.pathname;
+	const query = new URLSearchParams(window.location.search);
+	const view = query.get("view");
 
-	if (path.startsWith("/admin")) {
+	if (view === "admin") {
 		return <AdminPanel />;
-	} else {
+	}
+	if (view === "tv") {
 		return <RouletteViewHook />;
 	}
+
+	return <Menu />;
 }
 
 export default App;
