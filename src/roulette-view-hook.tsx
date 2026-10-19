@@ -3,6 +3,7 @@ import { useRoulette } from "./hooks/use-roulette";
 import type { RouletteItem } from "./types";
 import { Roulette } from "./components/roulette";
 import { PrizeModal } from "./prize-modal";
+import { soundManager } from "./sound-manager";
 
 interface RouletteState {
 	command: "stopped" | "spinning";
@@ -71,6 +72,7 @@ const RouletteGame: React.FC<{
 
 					if (state.command === "spinning") {
 						if (!isSpinning) {
+							soundManager.playSpinStart();
 							setIsSpinning(true);
 							onStart();
 						}
@@ -138,9 +140,9 @@ export const RouletteViewHook: React.FC = () => {
 			) : (
 				<p>Cargando ruleta...</p>
 			)}
-			{isModalOpen && (
+			{isModalOpen ? (
 				<PrizeModal prize={finalResult} onClose={() => setFinalResult(null)} />
-			)}
+			) : null}
 		</div>
 	);
 };
