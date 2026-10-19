@@ -53,7 +53,7 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 				className="pointer-events-none absolute inset-0"
 			/>
 
-			<div className="w-full max-w-sm text-center animate-fade-in-down mx-auto px-2">
+			<div className="w-full max-w-2xl text-center animate-fade-in-down mx-auto px-4">
 				{/* ¡FELICIDADES! - letras enormes sin contenedor, centradas en móvil */ }
 				<h2 className="text-[clamp(30px,9.5vw,72px)] font-black italic text-[#0a454d] leading-tight tracking-tight mb-4 mx-auto w-full text-balance">
 					¡FELICIDADES!
