@@ -139,11 +139,11 @@ export default function Menu() {
 					style={{ clipPath: "polygon(0 0, calc(100% - 78px) 0, calc(100% - 80px) 100%, 0 100%)" }}
 				/>
 
-				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
 					{/* ============================================================== */}
 					{/* BANNER "RULETA DIGITAL" (con separación bajo el header)        */}
 					{/* ============================================================== */}
-					<section className="relative mt-4 w-full h-[clamp(150px,19vh,224px)] overflow-hidden flex items-center">
+					<section className="relative mt-4 w-full h-[clamp(150px,19vh,224px)] shrink-0 overflow-hidden flex items-center">
 						{/* Línea roja fina */}
 						<div
 							className="absolute top-0 bottom-0 left-[48%] w-[3px] bg-[#E52421] pointer-events-none z-20 hidden sm:block"
@@ -200,7 +200,10 @@ export default function Menu() {
 					</section>
 
 					{/* Contenedor del contenido */}
-					<div className="w-full max-w-[1120px] mx-auto px-6 lg:px-10 pt-4 flex-1 flex flex-col justify-center gap-3 min-h-0">
+					<div
+						className="w-full max-w-[1120px] mx-auto px-6 lg:px-10 pt-4 pb-4 flex-1 flex flex-col gap-3 min-h-0"
+						style={{ justifyContent: "safe center" }}
+					>
 						{/* ============================================================== */}
 						{/* TARJETAS PRINCIPALES                                           */}
 						{/* ============================================================== */}
