@@ -61,6 +61,14 @@ export interface DrawPieLabel {
   style: StyleOptionDefault;
 }
 
+const FONT_SIZE_PATTERN = /\d+(?:\.\d+)?px/;
+
+/**
+ * Dibuja el nombre del premio SIEMPRE en horizontal (sin rotación), de forma
+ * que cuando el segmento quede bajo la flecha superior el texto se lea derecho.
+ * Si el nombre no cabe en el ancho del segmento, se reduce el tamaño de fuente
+ * (sin deformar el texto) hasta que entre.
+ */
 const drawPieLabel = ({
   context,
   geometry,
@@ -69,20 +77,41 @@ const drawPieLabel = ({
   anglePerSegment,
   style,
 }: DrawPieLabel): void => {
-  const { labelX, labelY, labelAngle } = calculateLabelPosition({
+  const { labelX, labelY } = calculateLabelPosition({
     geometry,
     segmentStartAngle,
     anglePerSegment,
     labelOffset: style.label.offset,
   });
 
+  // Ancho disponible: el menor entre el arco del segmento en ese radio y la
+  // distancia radial hasta el borde de la rueda (para no salirse del círculo).
+  const labelRadius = geometry.radius * style.label.offset;
+  const arcWidth =
+    labelRadius * ((anglePerSegment * Math.PI) / 180) * 0.92;
+  const radialWidth = 2 * (geometry.radius * 0.985 - labelRadius);
+  const maxWidth = Math.max(16, Math.min(arcWidth, radialWidth));
+
   context.save();
   context.translate(labelX, labelY);
-  context.rotate(labelAngle);
-  context.textAlign = style.label.align;
+  context.textAlign = "center";
   context.textBaseline = style.label.baseline;
   context.fillStyle = pie.color;
+
   context.font = style.label.font;
+  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
+  if (fontSizeMatch) {
+    const baseSize = Number.parseFloat(fontSizeMatch[0]);
+    const textWidth = context.measureText(pie.name).width;
+    if (textWidth > maxWidth) {
+      const fittedSize = Math.max(9, Math.floor((maxWidth / textWidth) * baseSize));
+      context.font = style.label.font.replace(
+        FONT_SIZE_PATTERN,
+        `${fittedSize}px`,
+      );
+    }
+  }
+
   context.fillText(pie.name, 0, 0);
   context.restore();
 };

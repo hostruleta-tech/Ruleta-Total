@@ -126,18 +126,35 @@ app.post("/api-ruleta/command", (req, res) => {
 	}
 
 	if (action === "stop") {
-		if (rouletteState.command !== "spinning") {
-			return res.status(400).json({ message: "Roulette is not spinning." });
+		// Se responde 200 aunque ya esté detenida (idempotente): un segundo clic
+		// no debe mostrarse como error, ya que la intención del operador es clara.
+		if (rouletteState.command === "spinning") {
+			rouletteState = {
+				command: "stopped",
+				targetPrize: null, // El frontend decidirá el premio
+				timestamp: Date.now(),
+			};
+			console.log("State updated: stopping");
+		} else {
+			console.log("Stop requested but roulette was already stopped.");
 		}
-		rouletteState = {
-			command: "stopped",
-			targetPrize: null, // El frontend decidirá el premio
-			timestamp: Date.now(),
-		};
-		console.log(`State updated: stopping`);
 		return res
 			.status(200)
 			.json({ message: "Stop command received.", state: rouletteState });
+	}
+
+	if (action === "finished") {
+		// Lo envía la pantalla pública cuando el giro termina por sí solo
+		// (la ruleta eligió el premio), para dejar el estado limpio.
+		rouletteState = {
+			command: "stopped",
+			targetPrize: null,
+			timestamp: Date.now(),
+		};
+		console.log("State updated: finished");
+		return res
+			.status(200)
+			.json({ message: "Spin finished.", state: rouletteState });
 	}
 
 	return res.status(400).json({ message: "Invalid action." });

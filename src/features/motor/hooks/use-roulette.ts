@@ -87,14 +87,34 @@ export const useRoulette = ({
   useEffect(() => {
     if (status !== "stop") return;
 
-    const { context } = setupCanvas(canvasRef.current);
-    drawCanvas({
-      rouletteItemList: items,
-      mergedOptions,
-      context,
-      geometry,
-      rouletteRef,
-    });
+    let cancelled = false;
+
+    const render = () => {
+      if (cancelled) return;
+      const { context } = setupCanvas(canvasRef.current);
+      drawCanvas({
+        rouletteItemList: items,
+        mergedOptions,
+        context,
+        geometry,
+        rouletteRef,
+      });
+    };
+
+    // Espera a que la fuente de la app esté disponible antes de dibujar en el
+    // canvas, si no se dibujaría con la fuente de respaldo (Arial).
+    if (typeof document !== "undefined" && document.fonts) {
+      document.fonts
+        .load(mergedOptions.style.label.font)
+        .then(render)
+        .catch(render);
+    } else {
+      render();
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [status, geometry, items, mergedOptions]);
 
   useEffect(() => {

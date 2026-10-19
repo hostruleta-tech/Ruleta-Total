@@ -3,6 +3,7 @@ const DICTIONARY: Record<string, string> = {
 	// Éxito (comandos de la ruleta)
 	"Spin command received.": "Girando la ruleta…",
 	"Stop command received.": "Deteniendo la ruleta…",
+	"Spin finished.": "Giro finalizado.",
 	// Errores de plantillas / premios
 	"Cannot delete the active roulette template.":
 		"No puedes borrar la plantilla activa. Marca otra como activa primero.",
