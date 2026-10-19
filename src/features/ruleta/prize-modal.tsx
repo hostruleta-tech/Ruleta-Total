@@ -53,15 +53,15 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 				className="pointer-events-none absolute inset-0"
 			/>
 
-			<div className="w-full max-w-sm text-center animate-fade-in-down">
-				{/* ¡FELICIDADES! - letras enormes sin contenedor */ }
-				<h2 className="text-[clamp(48px,14vw,96px)] font-black italic text-[#0a454d] leading-tight tracking-tight mb-4">
+			<div className="w-full max-w-sm text-center animate-fade-in-down mx-auto px-4">
+				{/* ¡FELICIDADES! - letras enormes sin contenedor, centradas en móvil */ }
+				<h2 className="text-[clamp(40px,12vw,80px)] font-black italic text-[#0a454d] leading-tight tracking-tight mb-4 mx-auto overflow-hidden whitespace-nowrap">
 					¡FELICIDADES!
 				</h2>
 
 				{/* Nombre del premio con su color real */ }
 				<p
-					className="text-[clamp(32px,10vw,64px)] font-black leading-tight tracking-tight mb-8"
+					className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
 					style={{ color: prizeColor ?? "#005f63" }}
 				>
 					{prize}
