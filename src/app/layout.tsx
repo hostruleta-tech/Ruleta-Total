@@ -1,14 +1,12 @@
-import logo from "../assets/logo.webp";
 import {
 	Maximize,
 	Minimize,
 	//  Volume2,
 	//  VolumeX
 } from "lucide-react";
-import { Button } from "./ui/button";
-import { useFullscreen } from "../hooks/use-fullscreen";
-import { cn } from "@/lib/utils";
-// import { useSound } from "../sound-context";
+import { Button } from "@/shared/ui/button";
+import { useFullscreen } from "@/shared/use-fullscreen";
+// import { useSound } from "@/shared/sound-context";
 export function Layout({ children }: { children: React.ReactNode }) {
 	const { isFullscreen, toggleFullscreen } = useFullscreen();
 	// const { isMuted, toggleMute } = useSound();
@@ -20,19 +18,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 	return (
 		<main className="dark bg-background text-foreground min-h-screen w-full relative">
 			<header className="absolute top-0 left-0 right-0 px-2 py-2 grid grid-cols-2 md:grid-cols-3 items-center place-content-center z-20  mx-auto max-w-4xl">
-				<a href="/ruleta/">
-					<img src={logo} width={120} alt="Logo de Keyton" height={20} />
-				</a>
-
-				<p
-					className={cn(
-						"font-serif w-full text-3xl text-center",
-						isTv && "opacity-0",
-					)}
-				>
-					Lo hace posible!
-				</p>
-
 				{/* <Button
 							variant="outline"
 							size="icon"

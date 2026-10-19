@@ -1,6 +1,6 @@
-import { AdminPanel } from "./admin-panel";
-import Menu from "./components/menu";
-import { RouletteViewHook } from "./roulette-view-hook";
+import { AdminPanel } from "@/features/panel/admin-panel";
+import Menu from "@/features/menu/menu";
+import { RouletteViewHook } from "@/features/ruleta/ruleta-screen";
 
 function App() {
 	const query = new URLSearchParams(window.location.search);

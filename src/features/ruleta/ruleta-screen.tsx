@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useRoulette } from "./hooks/use-roulette";
-import type { RouletteItem } from "./types";
-import { Roulette } from "./components/roulette";
+import { useRoulette } from "@/features/motor/hooks/use-roulette";
+import type { RouletteItem } from "@/features/motor/types";
+import { Roulette } from "@/features/motor/components/roulette";
 import { PrizeModal } from "./prize-modal";
-import { soundManager } from "./sound-manager";
-import { API_URL } from "./api";
+import { soundManager } from "@/shared/sound-manager";
+import { API_URL } from "@/shared/api";
 
 interface RouletteState {
 	command: "stopped" | "spinning";
@@ -129,9 +129,6 @@ export const RouletteViewHook: React.FC = () => {
 
 	return (
 		<div className="w-full h-screen flex gap-4 flex-col items-center justify-center relative">
-			<p className="font-serif text-4xl xl:text-5xl 2xl:text-6xl">
-				Lo hace posible!
-			</p>
 			{rouletteItems ? (
 				<RouletteGame
 					items={rouletteItems}
