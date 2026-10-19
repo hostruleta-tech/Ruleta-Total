@@ -1,6 +1,6 @@
 import { Pencil, Plus, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { API_URL } from "@/shared/api";
+import { adminFetch } from "@/shared/api";
 import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
@@ -47,7 +47,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		const fetchPrizes = async () => {
 			if (!templateId) return;
 			try {
-				const response = await fetch(`${API_URL}/roulettes/${templateId}`);
+				const response = await adminFetch(`/roulettes/${templateId}`);
 				const data = await response.json();
 				const loadedPrizes: Prize[] = data.prizes || [];
 				setPrizes(loadedPrizes);
@@ -67,9 +67,8 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const handleSaveConfiguration = async () => {
 		setIsLoading(true);
 		try {
-			const response = await fetch(`${API_URL}/roulettes/${templateId}`, {
+			const response = await adminFetch(`/roulettes/${templateId}`, {
 				method: "PUT",
-				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name: templateName, prizes }),
 			});
 			const result = await response.json();
@@ -128,6 +127,27 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		);
 	};
 
+	// Calcular probabilidades reales (Modelo A: pesos libres)
+	const totalWeight = prizes.reduce(
+		(sum, p) =>
+			sum +
+			(Number.isFinite(p.probability) && p.probability > 0 ? p.probability : 0),
+		0,
+	);
+	const getRealProbability = (weight: number): string => {
+		if (totalWeight <= 0 || !Number.isFinite(weight) || weight <= 0) return "—";
+		return `${((weight / totalWeight) * 100).toFixed(1)}%`;
+	};
+	const newPrizeRealProbability = (() => {
+		const weight =
+			Number.isFinite(newPrize.probability) && newPrize.probability > 0
+				? newPrize.probability
+				: 0;
+		if (weight <= 0) return "—";
+		const total = totalWeight + weight;
+		return `${((weight / total) * 100).toFixed(1)}%`;
+	})();
+
 	return (
 		<BrandCard>
 			<SectionHeading
@@ -152,6 +172,18 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 
 				{/* Lista de premios */}
 				<div className="space-y-3">
+					{totalWeight > 0 && (
+						<div className="rounded-xl bg-teal-50 border border-teal-200 p-3 text-sm">
+							<div className="flex flex-wrap items-center gap-4 text-teal-700">
+								<span className="font-medium">
+									Total de pesos: <span className="font-mono">{totalWeight}</span>
+								</span>
+								<span className="text-teal-600">
+									Modelo A (pesos libres): cada número es un peso relativo, no un % fijo.
+								</span>
+							</div>
+						</div>
+					)}
 					{prizes.map((prize, index) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: es la manera de identificar
 						<div
@@ -204,6 +236,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 											)
 										}
 									/>
+									<span className="text-[11px] font-medium leading-none text-teal-600">
+										Real: {getRealProbability(prize.probability)}
+									</span>
 								</div>
 								<BrandButton
 									onClick={() => handleRemovePrize(index)}
@@ -264,6 +299,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 									})
 								}
 							/>
+							<span className="text-[11px] font-medium leading-none text-teal-600">
+								Real: {newPrizeRealProbability}
+							</span>
 						</div>
 						<BrandButton onClick={handleAddPrize} variant="outline">
 							<Plus className="h-4 w-4" />

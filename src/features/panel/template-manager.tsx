@@ -1,6 +1,6 @@
 import { LayoutTemplate, ListChecks, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { API_URL } from "@/shared/api";
+import { adminFetch } from "@/shared/api";
 import { cn } from "@/shared/lib/utils";
 import {
 	Select,
@@ -38,7 +38,7 @@ export const TemplateManager: React.FC = () => {
 
 	const fetchTemplates = async () => {
 		try {
-			const response = await fetch(`${API_URL}/roulettes`);
+			const response = await adminFetch("/roulettes");
 			const data: RouletteTemplate[] = await response.json();
 			setTemplates(data);
 			if (!selectedTemplateId && data.length > 0) {
@@ -59,9 +59,8 @@ export const TemplateManager: React.FC = () => {
 	const handleCreateTemplate = async () => {
 		if (!newTemplateName.trim()) return;
 		try {
-			await fetch(`${API_URL}/roulettes`, {
+			await adminFetch("/roulettes", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name: newTemplateName, prizes: [] }),
 			});
 			setNewTemplateName("");
@@ -78,7 +77,7 @@ export const TemplateManager: React.FC = () => {
 		)
 			return;
 		try {
-			const response = await fetch(`${API_URL}/roulettes/${id}`, {
+			const response = await adminFetch(`/roulettes/${id}`, {
 				method: "DELETE",
 			});
 			if (!response.ok) {
@@ -100,7 +99,7 @@ export const TemplateManager: React.FC = () => {
 
 	const handleSetActive = async (id: number) => {
 		try {
-			await fetch(`${API_URL}/roulettes/active/${id}`, { method: "POST" });
+			await adminFetch(`/roulettes/active/${id}`, { method: "POST" });
 			fetchTemplates();
 			toast.success("Plantilla marcada como activa.");
 		} catch {

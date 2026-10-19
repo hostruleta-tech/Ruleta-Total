@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Database files (using Turso now)
+backend/roulette.db
+backend/db.json
+/roulette.db
+*.db
+*.db-journal
+
+# Herramientas locales de OpenCode
+.opencode/

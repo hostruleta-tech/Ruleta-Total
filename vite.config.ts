@@ -5,11 +5,19 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-	base: "/ruleta/",
+	base: "/",
 	plugins: [react(), tailwindcss()],
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
+		},
+	},
+	server: {
+		proxy: {
+			"/api-ruleta": {
+				target: "http://localhost:3001",
+				changeOrigin: true,
+			},
 		},
 	},
 	build: {
