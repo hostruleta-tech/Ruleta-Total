@@ -1,4 +1,4 @@
-import { ListChecks, SlidersHorizontal } from "lucide-react";
+import { ListChecks, Plus } from "lucide-react";
 import { API_URL } from "@/shared/api";
 import { translateMessage } from "./panel-messages";
 import { PanelShell } from "./panel-shell";
@@ -28,24 +28,16 @@ const AdminPanelContent: React.FC = () => {
 					</p>
 				</div>
 
-				{/* Estado de la promoción activa */}
-				<BrandCard tone="dark">
-					<SectionHeading
-						icon={SlidersHorizontal}
-						title="Promoción activa"
-						subtitle="Plantilla que están viendo los participantes en sus teléfonos."
-						tone="light"
-					/>
-					<TemplateManager />
-				</BrandCard>
+				{/* Promoción activa - TemplateManager directo sin envolver en dark card */}
+				<TemplateManager />
 
-				{/* Instrucciones rápidas */}
+				{/* Instrucciones rápidas - SectionHeading con tono oscuro por defecto */}
 				<BrandCard tone="light">
 					<SectionHeading
 						icon={ListChecks}
 						title="Cómo funciona"
 						subtitle="Flujo del participante desde el teléfono."
-						tone="light"
+						/* tone por defecto = "dark" → texto oscuro sobre fondo blanco */
 					/>
 					<div className="mt-4 space-y-3 text-sm text-slate-600">
 						<div className="flex items-start gap-3">
