@@ -9,7 +9,7 @@ function App() {
 	if (view === "admin") {
 		return <AdminPanel />;
 	}
-	if (view === "tv") {
+	if (view === "play") {
 		return <RouletteViewHook />;
 	}
 

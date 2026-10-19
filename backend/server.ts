@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { randomUUID } from "crypto";
 import {
 	initializeDatabase,
 	getActiveRouletteWithPrizes,
@@ -10,6 +11,7 @@ import {
 	deleteRoulette,
 	setActiveRoulette,
 	type Prize,
+	type RouletteTemplate,
 } from "./database";
 
 const app = express();
@@ -18,21 +20,63 @@ const port = process.env.PORT || 3001;
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-// In-memory state for the roulette
-let rouletteState = {
-	command: "stopped", // 'stopped', 'spinning'
-	targetPrize: null as string | null,
-	timestamp: Date.now(),
-};
+// Utilidad: sorteo ponderado por probabilidad
+function pickWeightedIndex(prizes: Prize[]): number {
+	if (prizes.length === 0) return -1;
 
-// API-ruleta Endpoints
+	const weights = prizes.map((p) => {
+		const v = Number(p.probability);
+		return Number.isFinite(v) && v > 0 ? v : 0;
+	});
+	const total = weights.reduce((a, b) => a + b, 0);
+
+	if (total <= 0) {
+		return Math.floor(Math.random() * prizes.length);
+	}
+
+	let r = Math.random() * total;
+	for (let i = 0; i < prizes.length; i++) {
+		r -= weights[i];
+		if (r < 0) return i;
+	}
+	return prizes.length - 1;
+}
 
 /**
- * GET /api-ruleta/state
- * The public roulette view polls this endpoint to get the latest command.
+ * POST /api-ruleta/spin
+ * El participante (teléfono) solicita un giro.
+ * El servidor sortea con la plantilla activa y devuelve el premio elegido.
  */
-app.get("/api-ruleta/state", (req, res) => {
-	res.json(rouletteState);
+app.post("/api-ruleta/spin", async (req, res) => {
+	try {
+		const active = await getActiveRouletteWithPrizes();
+		if (!active || !active.prizes || active.prizes.length === 0) {
+			return res
+				.status(404)
+				.json({ message: "No hay plantilla activa con premios." });
+		}
+
+		const winnerIndex = pickWeightedIndex(active.prizes);
+		const prize = active.prizes[winnerIndex];
+
+		// Generar un código de reclamo simple (para fase futura de validación)
+		const claimCode = randomUUID().slice(0, 8).toUpperCase();
+
+		return res.json({
+			claimCode,
+			prizeIndex: winnerIndex,
+			prize: prize.name,
+			prizes: active.prizes.map((p) => ({
+				name: p.name,
+				backgroundColor: p.backgroundColor,
+				probability: p.probability,
+			})),
+			rouletteId: active.id,
+		});
+	} catch (error) {
+		console.error("Spin error:", error);
+		return res.status(500).json({ message: "Error al procesar el giro." });
+	}
 });
 
 /**
@@ -97,67 +141,6 @@ app.delete("/api-ruleta/roulettes/:id", async (req, res) => {
 app.post("/api-ruleta/roulettes/active/:id", async (req, res) => {
 	await setActiveRoulette(Number(req.params.id));
 	res.status(200).json({ message: "Active roulette updated." });
-});
-
-/**
- * POST /api-ruleta/command
- * The admin panel sends actions ('spin', 'stop') to this endpoint.
- */
-app.post("/api-ruleta/command", (req, res) => {
-	const { action, prize } = req.body;
-
-	if (action === "spin") {
-		// Allow spinning from a 'stopped' state to reset, but prevent rapi-ruletad re-spins.
-		if (
-			rouletteState.command === "spinning" &&
-			Date.now() - rouletteState.timestamp < 2000
-		) {
-			return res.status(400).json({ message: "Roulette is already spinning." });
-		}
-		rouletteState = {
-			command: "spinning",
-			targetPrize: null,
-			timestamp: Date.now(),
-		};
-		console.log("State updated: spinning");
-		return res
-			.status(200)
-			.json({ message: "Spin command received.", state: rouletteState });
-	}
-
-	if (action === "stop") {
-		// Se responde 200 aunque ya esté detenida (idempotente): un segundo clic
-		// no debe mostrarse como error, ya que la intención del operador es clara.
-		if (rouletteState.command === "spinning") {
-			rouletteState = {
-				command: "stopped",
-				targetPrize: null, // El frontend decidirá el premio
-				timestamp: Date.now(),
-			};
-			console.log("State updated: stopping");
-		} else {
-			console.log("Stop requested but roulette was already stopped.");
-		}
-		return res
-			.status(200)
-			.json({ message: "Stop command received.", state: rouletteState });
-	}
-
-	if (action === "finished") {
-		// Lo envía la pantalla pública cuando el giro termina por sí solo
-		// (la ruleta eligió el premio), para dejar el estado limpio.
-		rouletteState = {
-			command: "stopped",
-			targetPrize: null,
-			timestamp: Date.now(),
-		};
-		console.log("State updated: finished");
-		return res
-			.status(200)
-			.json({ message: "Spin finished.", state: rouletteState });
-	}
-
-	return res.status(400).json({ message: "Invalid action." });
 });
 
 // Health check endpoint

@@ -1,5 +1,4 @@
-import { Gauge, Play, Square } from "lucide-react";
-import { useState } from "react";
+import { ListChecks, SlidersHorizontal } from "lucide-react";
 import { API_URL } from "@/shared/api";
 import { translateMessage } from "./panel-messages";
 import { PanelShell } from "./panel-shell";
@@ -9,34 +8,6 @@ import { TemplateManager } from "./template-manager";
 
 const AdminPanelContent: React.FC = () => {
 	const toast = useToast();
-	const [isLoading, setIsLoading] = useState<boolean>(false);
-
-	const handleCommand = async (action: "spin" | "stop") => {
-		setIsLoading(true);
-		try {
-			const response = await fetch(`${API_URL}/command`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ action }),
-			});
-
-			const result = await response.json();
-
-			if (!response.ok) {
-				throw new Error(result.message || "Ha ocurrido un error.");
-			}
-
-			toast.success(translateMessage(result.message, "Comando enviado."));
-		} catch (error) {
-			toast.error(
-				translateMessage(error instanceof Error ? error.message : undefined),
-			);
-		} finally {
-			setIsLoading(false);
-		}
-	};
 
 	return (
 		<PanelShell badge="Panel del Operador">
@@ -52,44 +23,49 @@ const AdminPanelContent: React.FC = () => {
 						<div className="h-[2px] w-16 bg-[#D3DCE1]" />
 					</div>
 					<p className="mt-3 text-sm md:text-base font-medium text-slate-500">
-						Controla el giro de la ruleta y administra los premios de la
-						promoción.
+						Administra los premios y plantillas de la promoción.
+						El giro lo inicia el participante desde su teléfono.
 					</p>
 				</div>
 
-				{/* Control del giro */}
+				{/* Estado de la promoción activa */}
 				<BrandCard tone="dark">
 					<SectionHeading
-						icon={Gauge}
-						title="Control del giro"
-						subtitle="Gira o detiene la ruleta activa en la pantalla pública."
+						icon={SlidersHorizontal}
+						title="Promoción activa"
+						subtitle="Plantilla que están viendo los participantes en sus teléfonos."
 						tone="light"
 					/>
-					<div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-						<BrandButton
-							variant="light"
-							size="lg"
-							onClick={() => handleCommand("spin")}
-							disabled={isLoading}
-							className="w-full sm:w-auto"
-						>
-							<Play className="h-5 w-5" />
-							Girar Ruleta
-						</BrandButton>
-						<BrandButton
-							variant="danger"
-							size="lg"
-							onClick={() => handleCommand("stop")}
-							disabled={isLoading}
-							className="w-full sm:w-auto"
-						>
-							<Square className="h-5 w-5" />
-							Detener Ruleta
-						</BrandButton>
-					</div>
+					<TemplateManager />
 				</BrandCard>
 
-				<TemplateManager />
+				{/* Instrucciones rápidas */}
+				<BrandCard tone="light">
+					<SectionHeading
+						icon={ListChecks}
+						title="Cómo funciona"
+						subtitle="Flujo del participante desde el teléfono."
+						tone="light"
+					/>
+					<div className="mt-4 space-y-3 text-sm text-slate-600">
+						<div className="flex items-start gap-3">
+							<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#035157]/10 text-[#035157] flex items-center justify-center text-xs font-bold">1</span>
+							<p>El participante abre el enlace de la ruleta en su móvil.</p>
+						</div>
+						<div className="flex items-start gap-3">
+							<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#035157]/10 text-[#035157] flex items-center justify-center text-xs font-bold">2</span>
+							<p>Pulsa «Girar Ruleta»; el servidor sortea el premio según las probabilidades.</p>
+						</div>
+						<div className="flex items-start gap-3">
+							<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#035157]/10 text-[#035157] flex items-center justify-center text-xs font-bold">3</span>
+							<p>La ruleta frena sola y muestra el resultado con un código.</p>
+						</div>
+						<div className="flex items-start gap-3">
+							<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#035157]/10 text-[#035157] flex items-center justify-center text-xs font-bold">4</span>
+							<p>El personal valida el código y entrega el premio.</p>
+						</div>
+					</div>
+				</BrandCard>
 			</div>
 		</PanelShell>
 	);

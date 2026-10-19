@@ -18,12 +18,6 @@ import logoTotal from "@/assets/logotipo-total.png";
 const TOOLS_PHOTO =
 	"https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=1400&q=80";
 
-interface RouletteState {
-	command: "stopped" | "spinning";
-	targetPrize: string | null;
-	timestamp: number;
-}
-
 // Grosor del marco cromado por lado (p-[14px] + p-[8px] + p-[2px]) + aire
 // lateral, para que la ruleta nunca toque ni recorte los bordes.
 const FRAME_THICKNESS = 24;
@@ -68,29 +62,30 @@ const useWheelSize = () => {
 	return { size, areaRef };
 };
 
-/** Controles imperativos del motor, expuestos al padre para disparar giros sin esperar al polling. */
+/** Controles del motor expuestos al padre. */
 interface RouletteControls {
-	start: () => void;
-	stop: () => void;
+	start: (targetIndex?: number) => void;
 }
 
 const RouletteGame: React.FC<{
 	items: RouletteItem[];
 	onPrizeWon: (prize: string) => void;
-	isPaused: boolean;
+	onSpinStart: () => void;
+	onSpinEnd: () => void;
 	size: number;
-	onSpinStateChange: (spinning: boolean) => void;
 	onControlsReady?: (controls: RouletteControls) => void;
 }> = ({
 	items,
 	onPrizeWon,
-	isPaused,
+	onSpinStart,
+	onSpinEnd,
 	size,
-	onSpinStateChange,
 	onControlsReady,
 }) => {
 	const { roulette, onStart, onStop } = useRoulette({
 		items,
+		onSpinUp: onSpinStart,
+		onSpinDown: onSpinEnd,
 		onSpinEnd: (result: string) => {
 			onPrizeWon(result);
 		},
@@ -120,47 +115,10 @@ const RouletteGame: React.FC<{
 		},
 	});
 
-	const lastCommandTimestamp = useRef<number>(0);
-
-	// Expone los controles del motor (girar/detener) al componente padre
+	// Expone los controles del motor al componente padre
 	useEffect(() => {
-		onControlsReady?.({ start: onStart, stop: onStop });
-	}, [onControlsReady, onStart, onStop]);
-
-	// Polling de comandos remotos
-	useEffect(() => {
-		const pollInterval = setInterval(async () => {
-			try {
-				if (isPaused) return;
-
-				const response = await fetch(`${API_URL}/state`);
-				if (!response.ok) return;
-
-				const state: RouletteState = await response.json();
-
-				if (state.timestamp > lastCommandTimestamp.current) {
-					lastCommandTimestamp.current = state.timestamp;
-
-					// Las órdenes se aplican siempre que lleguen: onStart/onStop del
-					// motor ya son idempotentes (comprueban el estado interno). Así la
-					// pantalla reacciona aunque el giro lo haya lanzado el panel y se
-					// mantiene sincronizado el estado de "girando".
-					if (state.command === "spinning") {
-						soundManager.playSpinStart();
-						onSpinStateChange(true);
-						onStart();
-					} else if (state.command === "stopped") {
-						onSpinStateChange(false);
-						onStop();
-					}
-				}
-			} catch (error) {
-				console.error("Polling error:", error);
-			}
-		}, 2000);
-
-		return () => clearInterval(pollInterval);
-	}, [onSpinStateChange, onStart, onStop, isPaused]);
+		onControlsReady?.({ start: onStart });
+	}, [onControlsReady, onStart]);
 
 	return (
 		<div className="relative flex items-center justify-center">
@@ -242,20 +200,31 @@ const RouletteGame: React.FC<{
 	);
 };
 
+interface SpinResponse {
+	claimCode: string;
+	prizeIndex: number;
+	prize: string;
+	prizes: { name: string; backgroundColor: string; probability: number }[];
+	rouletteId: number;
+}
+
 export const RouletteViewHook: React.FC = () => {
 	const { size: wheelSize, areaRef } = useWheelSize();
 	const { isFullscreen, toggleFullscreen } = useFullscreen();
 	const [rouletteItems, setRouletteItems] = useState<RouletteItem[] | null>(null);
 	const [finalResult, setFinalResult] = useState<string | null>(null);
 	const [isSpinning, setIsSpinning] = useState<boolean>(false);
+	const [claimCode, setClaimCode] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
 	const isModalOpen = finalResult !== null;
 
-	// Controles del motor (girar/detener) expuestos por RouletteGame
+	// Controles del motor expuestos por RouletteGame
 	const controlsRef = useRef<RouletteControls | null>(null);
 	const handleControlsReady = useCallback((controls: RouletteControls) => {
 		controlsRef.current = controls;
 	}, []);
 
+	// Carga la configuración de premios (plantilla activa)
 	useEffect(() => {
 		const fetchPrizes = async () => {
 			if (isModalOpen) return;
@@ -285,46 +254,63 @@ export const RouletteViewHook: React.FC = () => {
 		return () => clearInterval(configPollInterval);
 	}, [isModalOpen]);
 
-	const handleLocalSpin = async () => {
-		if (isSpinning || isModalOpen) return;
-		try {
-			// Arranca el motor localmente (sin esperar al polling) y avisa al
-			// backend para que el panel del operador quede sincronizado.
-			setIsSpinning(true);
-			controlsRef.current?.start();
+	const handleSpin = async () => {
+		if (isSpinning || isModalOpen || !rouletteItems) return;
 
-			const response = await fetch(`${API_URL}/command`, {
+		setError(null);
+		setIsSpinning(true);
+		soundManager.playSpinStart();
+
+		try {
+			// Solicita el giro al servidor
+			const response = await fetch(`${API_URL}/spin`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ action: "spin" }),
 			});
 
 			if (!response.ok) {
 				const result = await response.json().catch(() => ({}));
 				throw new Error(
-					(result as { message?: string }).message || "Spin request failed",
+					(result as { message?: string }).message || "Error al girar la ruleta",
 				);
 			}
-		} catch (error) {
-			console.error("Spin request failed", error);
-			// Revierte el arranque local si el backend no aceptó el giro
-			controlsRef.current?.stop();
+
+			const spinData: SpinResponse = await response.json();
+
+			// Actualiza la lista de premios con la que devolvió el servidor
+			// (garantiza sincronía visual)
+			const formattedPrizes: RouletteItem[] = spinData.prizes.map((p) => ({
+				name: p.name,
+				bg: p.backgroundColor,
+				weight: p.probability,
+			}));
+			setRouletteItems(formattedPrizes);
+
+			// Guarda el código de reclamo
+			setClaimCode(spinData.claimCode);
+
+			// Arranca el motor con el índice ganador decidido por el servidor
+			controlsRef.current?.start(spinData.prizeIndex);
+		} catch (err) {
+			console.error("Spin failed:", err);
+			setError(err instanceof Error ? err.message : "Error al procesar el giro");
 			setIsSpinning(false);
+			soundManager.playSpinStart(); // para que no quede sonando
 		}
 	};
 
-	const handlePrizeWon = (prize: string) => {
-		setIsSpinning(false);
-		setFinalResult(prize);
+	const handleSpinStart = () => {
+		// El motor ya está girando, isSpinning ya está true
+	};
 
-		// Informa al backend que el giro terminó por sí solo, para dejar su
-		// estado en "stopped" y evitar que la TV se ponga a girar sola al
-		// recargar.
-		fetch(`${API_URL}/command`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ action: "finished" }),
-		}).catch((error) => console.error("Finish notification failed", error));
+	const handleSpinEnd = () => {
+		// El motor terminó la animación de frenado
+		setIsSpinning(false);
+	};
+
+	const handlePrizeWon = (prize: string) => {
+		setFinalResult(prize);
+		soundManager.playWin();
 	};
 
 	return (
@@ -385,9 +371,9 @@ export const RouletteViewHook: React.FC = () => {
 						<RouletteGame
 							items={rouletteItems}
 							onPrizeWon={handlePrizeWon}
-							isPaused={isModalOpen}
+							onSpinStart={handleSpinStart}
+							onSpinEnd={handleSpinEnd}
 							size={wheelSize}
-							onSpinStateChange={setIsSpinning}
 							onControlsReady={handleControlsReady}
 						/>
 					) : (
@@ -402,7 +388,7 @@ export const RouletteViewHook: React.FC = () => {
 				<div className="w-full flex flex-col items-center gap-2.5 shrink-0 pb-16 sm:pb-20">
 					{/* BOTÓN GIRAR RULETA */}
 					<button
-						onClick={handleLocalSpin}
+						onClick={handleSpin}
 						disabled={isSpinning || !rouletteItems}
 						className={`
 							w-full max-w-[380px] py-4 px-6 rounded-full flex items-center justify-center gap-3
@@ -434,6 +420,13 @@ export const RouletteViewHook: React.FC = () => {
 						<span>{isSpinning ? "Girando..." : "Girar Ruleta"}</span>
 					</button>
 
+					{/* Mensaje de error si falla el giro */}
+					{error && (
+						<div className="w-full max-w-[380px] text-center text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+							{error}
+						</div>
+					)}
+
 					{/* TARJETA: "Tu premio aparecerá aquí" */}
 					<div className="w-full max-w-[380px] bg-white/95 border border-slate-200/90 rounded-2xl p-3 flex items-center gap-3 shadow-sm backdrop-blur-sm">
 						{/* Icono de regalo estilizado en Teal */}
@@ -461,7 +454,9 @@ export const RouletteViewHook: React.FC = () => {
 								{finalResult ? finalResult : "Tu premio aparecerá aquí"}
 							</span>
 							<span className="text-slate-500 text-xs sm:text-sm font-medium mt-0.5">
-								{finalResult ? "¡Felicidades por ganar!" : "¡Buena suerte!"}
+								{finalResult
+									? `¡Felicidades! Código: ${claimCode}`
+									: "¡Buena suerte!"}
 							</span>
 						</div>
 					</div>

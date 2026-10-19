@@ -20,7 +20,7 @@ export const useRoulette = ({
 }): {
   roulette: RouletteCanvas;
   result: string;
-  onStart: () => void;
+  onStart: (targetIndex?: number) => void;
   onStop: () => void;
 } => {
   const mergedOptions = useMemo(() => {
@@ -79,6 +79,8 @@ export const useRoulette = ({
   const mergedOptionsRef = useRef(mergedOptions);
   const geometryRef = useRef(geometry);
   const callbacksRef = useRef({ onSpinUp, onSpinDown, onSpinEnd });
+  // Índice objetivo del premio ganador (venido del servidor).
+  const targetWinnerIndexRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -89,16 +91,45 @@ export const useRoulette = ({
 
   const [status, setStatus] = useState<"stop" | "running" | "ending">("stop");
 
-  const onStart = useCallback(() => {
+  // Auto-stop: temporizador para cambiar a "ending" tras spinDuration
+  const spinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSpinTimeout = useCallback(() => {
+    if (spinTimeoutRef.current) {
+      clearTimeout(spinTimeoutRef.current);
+      spinTimeoutRef.current = null;
+    }
+  }, []);
+
+  const onStart = useCallback((targetIndex?: number) => {
     if (status !== "stop") return;
+
+    // Guarda el índice objetivo (si viene del servidor) para la animación.
+    targetWinnerIndexRef.current = targetIndex;
+
+    clearSpinTimeout();
     setStatus("running");
-  }, [status]);
+
+    // Programa la transición automática a frenado.
+    // No hace falta comprobar status: si el timeout se ejecuta, el
+    // componente sigue montado y no se ha llamado a onStop/clearSpinTimeout.
+    spinTimeoutRef.current = setTimeout(() => {
+      setStatus("ending");
+    }, mergedOptions.spinDuration);
+  }, [status, mergedOptions.spinDuration, clearSpinTimeout]);
 
   const onStop = useCallback(() => {
     if (status !== "running") return;
+    clearSpinTimeout();
     setStatus("ending");
-  }, [status]);
+  }, [status, clearSpinTimeout]);
 
+  // Limpieza al desmontar
+  useEffect(() => {
+    return () => clearSpinTimeout();
+  }, [clearSpinTimeout]);
+
+  // Render en estado "stop" (ruleta quieta)
   useEffect(() => {
     if (status !== "stop") return;
 
@@ -132,6 +163,7 @@ export const useRoulette = ({
     };
   }, [status, geometry, items, mergedOptions]);
 
+  // Animación en "running" y "ending"
   useEffect(() => {
     if (status !== "running" && status !== "ending") return;
 
@@ -142,6 +174,7 @@ export const useRoulette = ({
     if (status === "ending") {
       callbacks.onSpinDown?.();
     }
+
     const { context } = setupCanvas(canvasRef.current);
     const cancelAnimation = animateRoulette({
       rouletteItemList: itemsRef.current,
@@ -150,12 +183,14 @@ export const useRoulette = ({
       status,
       geometry: geometryRef.current,
       rouletteRef,
+      targetWinnerIndex: targetWinnerIndexRef.current,
       onFinish: (rouletteResult: string) => {
         setStatus("stop");
         resultRef.current = rouletteResult;
         callbacksRef.current.onSpinEnd?.(rouletteResult);
       },
     });
+
     return () => {
       cancelAnimation();
     };

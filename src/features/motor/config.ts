@@ -7,6 +7,8 @@ export interface RouletteOptions {
   maxSpeed: number;
   acceleration: number;
   deceleration: number;
+  // Duración de la fase de giro a velocidad máxima antes de empezar a frenar.
+  spinDuration: number;
   // Duración del frenado en milisegundos (a mayor valor, más suave y lento).
   stopDuration: number;
   determineAngle: number;
@@ -25,6 +27,7 @@ export const defaultOptions: DefaultRouletteOptions = {
   rotationDirection: "clockwise",
   acceleration: 1,
   deceleration: 1,
+  spinDuration: 2500,
   stopDuration: 6500,
   initialAngle: 0,
   determineAngle: 45,

@@ -1,14 +1,15 @@
 import {
 	ArrowRight,
 	ChevronRight,
+	ListChecks,
 	MapPin,
 	Monitor,
 	Play,
 	Radio,
 	Settings,
 	SlidersHorizontal,
+	Smartphone,
 	Target,
-	Tv,
 } from "lucide-react";
 import logoTotal from "@/assets/logotipo-total.png";
 
@@ -22,27 +23,27 @@ export default function Menu() {
 	const steps = [
 		{
 			n: 1,
-			icon: Monitor,
-			title: "Abre el Panel del Operador",
-			desc: "y crea o edita los premios.",
+			icon: SlidersHorizontal,
+			title: "Configura los premios",
+			desc: "En el panel, crea o edita la plantilla y márcala como activa.",
 		},
 		{
 			n: 2,
-			icon: SlidersHorizontal,
-			title: "Guarda los cambios",
-			desc: "y marca la plantilla como activa.",
+			icon: Smartphone,
+			title: "Participante abre el enlace",
+			desc: "Comparte la URL con ?view=play o el QR (próximamente).",
 		},
 		{
 			n: 3,
-			icon: Tv,
-			title: "Abre la Pantalla Pública",
-			desc: "en la TV o monitor.",
+			icon: Play,
+			title: "Pulsa «Girar Ruleta»",
+			desc: "El servidor sortea y la ruleta frena sola en el premio.",
 		},
 		{
 			n: 4,
-			icon: Play,
-			title: "Desde el panel, usa Girar y Detener",
-			desc: "para controlar la ruleta. El resultado aparece en la pantalla pública.",
+			icon: ListChecks,
+			title: "Valida y entrega",
+			desc: "El personal verifica el código y entrega el premio.",
 		},
 	];
 
@@ -205,32 +206,32 @@ export default function Menu() {
 						{/* ============================================================== */}
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-							{/* Tarjeta Pantalla Pública (Dark Teal Card) */}
+							{/* Tarjeta Experiencia del Participante (Dark Teal Card) */}
 							<div className="relative bg-gradient-to-br from-[#005256] via-[#005f63] to-[#003d40] text-white rounded-3xl p-5 shadow-xl overflow-hidden flex flex-col justify-between border border-teal-600/40 transform hover:-translate-y-0.5 transition-all">
 								{/* Franja vertical roja/blanca de marca */}
 								<div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-[#e51a24] via-[#e51a24] to-white" aria-hidden="true" />
 								<div className="flex items-start gap-5 pl-2">
-									{/* Ícono grande de monitor */}
+									{/* Ícono grande de smartphone */}
 									<div className="w-20 h-16 rounded-2xl border-2 border-white/80 flex items-center justify-center flex-none bg-white/10 shadow-inner">
-										<Tv className="h-8 w-8 text-white" strokeWidth={1.6} aria-hidden="true" />
+										<Smartphone className="h-8 w-8 text-white" strokeWidth={1.6} aria-hidden="true" />
 									</div>
 									{/* Información */}
 									<div className="flex-1">
-										<h2 className="text-xl md:text-2xl font-black text-white tracking-tight">Pantalla Pública</h2>
+										<h2 className="text-xl md:text-2xl font-black text-white tracking-tight">Experiencia del participante</h2>
 										<p className="text-xs md:text-sm text-teal-100 font-normal leading-snug mt-1.5">
-											Muestra la ruleta a pantalla completa en la TV o monitor, para que la vean los participantes.
+											La ruleta en el móvil del cliente. Gira, frena sola y muestra el premio con código.
 										</p>
 									</div>
 								</div>
-								{/* Botón pill inferior: abrir pantalla pública */}
+								{/* Botón pill inferior: abrir experiencia */}
 								<div className="mt-4 flex justify-end pr-2">
 									<button
 										type="button"
-										onClick={() => onSelectView("tv")}
+										onClick={() => onSelectView("play")}
 										className="w-full sm:w-auto px-7 py-2.5 rounded-full bg-white text-[#063f43] hover:bg-slate-100 font-bold text-sm tracking-wide shadow-md flex items-center justify-center gap-2.5 transition active:scale-95 group"
 									>
 										<Monitor className="h-4 w-4 group-hover:scale-110 transition-transform" aria-hidden="true" />
-										<span>Abrir pantalla</span>
+										<span>Abrir experiencia</span>
 										<ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" aria-hidden="true" />
 									</button>
 								</div>
@@ -241,15 +242,15 @@ export default function Menu() {
 								{/* Franja vertical teal/roja de marca */}
 								<div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-[#005f63] via-[#005f63] to-[#e51a24]" aria-hidden="true" />
 								<div className="flex items-start gap-5 pl-2">
-									{/* Ícono de transmisión en vivo */}
+									{/* Ícono de configuración */}
 									<div className="w-20 h-16 rounded-2xl flex items-center justify-center flex-none bg-teal-50 text-[#005f63] border border-teal-100 shadow-inner">
-										<Radio className="h-8 w-8" strokeWidth={1.6} aria-hidden="true" />
+										<Settings className="h-8 w-8" strokeWidth={1.6} aria-hidden="true" />
 									</div>
 									{/* Información */}
 									<div className="flex-1">
 										<h2 className="text-xl md:text-2xl font-black text-[#005f63] tracking-tight">Panel del Operador</h2>
 										<p className="text-xs md:text-sm text-slate-600 font-normal leading-snug mt-1.5">
-											Controla el giro (Girar / Detener) y administra los premios de la ruleta.
+											Administra plantillas y premios. El giro lo inicia el participante desde su teléfono.
 										</p>
 									</div>
 								</div>

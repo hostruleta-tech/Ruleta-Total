@@ -1,22 +1,11 @@
 import type { DefaultRouletteOptions } from "../config";
 import type { Geometry, RotationDirection, RouletteItem } from "../types";
 import { drawCanvas } from "./draw-canvas";
-import { calculateTargetRotation, pickWeightedIndex } from "./utils";
+import { calculateTargetRotation } from "./utils";
 
 // Duración de un frame de referencia (60fps). Sirve para normalizar la
 // velocidad entre pantallas con distinta frecuencia de refresco.
 const FRAME_MS = 1000 / 60;
-
-const calculateSpeed = (
-	curSpeed: number,
-	options: DefaultRouletteOptions,
-	deltaFrames: number,
-): number => {
-	if (curSpeed <= options.maxSpeed) {
-		return curSpeed + options.acceleration * deltaFrames;
-	}
-	return curSpeed;
-};
 
 const calcTotalRotation = (rotationDirection: RotationDirection) => {
 	if (rotationDirection === "clockwise") {
@@ -29,15 +18,7 @@ const calcTotalRotation = (rotationDirection: RotationDirection) => {
 	};
 };
 
-export const animateRoulette = ({
-	rouletteItemList,
-	mergedOptions,
-	context,
-	status,
-	geometry,
-	rouletteRef,
-	onFinish,
-}: {
+interface AnimateRouletteParams {
 	rouletteItemList: RouletteItem[];
 	mergedOptions: DefaultRouletteOptions;
 	context: CanvasRenderingContext2D;
@@ -48,7 +29,21 @@ export const animateRoulette = ({
 		totalRotation: number;
 	}>;
 	onFinish: (rouletteResult: string) => void;
-}) => {
+	// Índice del premio ganador, ya decidido por el servidor.
+	// Si no se proporciona, se sortea internamente (compatibilidad/fallback).
+	targetWinnerIndex?: number;
+}
+
+export const animateRoulette = ({
+	rouletteItemList,
+	mergedOptions,
+	context,
+	status,
+	geometry,
+	rouletteRef,
+	onFinish,
+	targetWinnerIndex,
+}: AnimateRouletteParams) => {
 	const getTotalRotation = calcTotalRotation(mergedOptions.rotationDirection);
 
 	let animationFrameId = 0;
@@ -84,8 +79,14 @@ export const animateRoulette = ({
 					return;
 				}
 
-				// El ganador se sortea según la probabilidad (peso) de cada premio.
-				const winnerIndex = pickWeightedIndex(rouletteItemList);
+				// El ganador: si viene del servidor (targetWinnerIndex), se usa ese;
+				// si no, se sortea según la probabilidad (peso) de cada premio.
+				const winnerIndex =
+					targetWinnerIndex != null && targetWinnerIndex >= 0 &&
+					targetWinnerIndex < itemCount
+						? targetWinnerIndex
+						: pickWeightedIndexLocal(rouletteItemList);
+
 				endingWinnerName =
 					rouletteItemList[winnerIndex]?.name ?? "No Result";
 
@@ -136,8 +137,9 @@ export const animateRoulette = ({
 			return;
 		}
 
-		// Fase de giro: acelera hasta la velocidad máxima.
-		curSpeed = calculateSpeed(curSpeed, mergedOptions, deltaFrames);
+		// Fase de giro: a velocidad máxima constante hasta que el hook
+		// cambie el status a "ending" (tras spinDuration).
+		curSpeed = mergedOptions.maxSpeed;
 		rouletteRef.current.speed = curSpeed;
 		rouletteRef.current.totalRotation = getTotalRotation(
 			rouletteRef.current.totalRotation,
@@ -151,9 +153,32 @@ export const animateRoulette = ({
 			geometry,
 			rouletteRef,
 		});
+
 		animationFrameId = requestAnimationFrame(animate);
 	};
 
 	animationFrameId = requestAnimationFrame(animate);
 	return () => cancelAnimationFrame(animationFrameId);
 };
+
+// Sorteo ponderado local (fallback si no viene targetWinnerIndex)
+function pickWeightedIndexLocal(pieList: RouletteItem[]): number {
+	if (pieList.length === 0) return -1;
+
+	const weights = pieList.map((pie) => {
+		const value = pie.weight == null ? 1 : Number(pie.weight);
+		return Number.isFinite(value) && value > 0 ? value : 0;
+	});
+	const total = weights.reduce((acc, weight) => acc + weight, 0);
+
+	if (total <= 0) {
+		return Math.floor(Math.random() * pieList.length);
+	}
+
+	let random = Math.random() * total;
+	for (let index = 0; index < pieList.length; index += 1) {
+		random -= weights[index];
+		if (random < 0) return index;
+	}
+	return pieList.length - 1;
+}
