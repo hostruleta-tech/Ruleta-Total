@@ -3,42 +3,53 @@ import React, { useState, useEffect } from 'react';
 const API_URL = 'http://localhost:3001/api';
 
 export interface Prize {
+  roulette_id?: number;
   name: string;
   backgroundColor: string;
   probability: number;
 }
 
-export const PrizeManager: React.FC = () => {
+interface PrizeManagerProps {
+  templateId: number;
+  isActive: boolean;
+  onDelete: () => void;
+  onSetActive: () => void;
+}
+
+export const PrizeManager: React.FC<PrizeManagerProps> = ({ templateId, isActive, onDelete, onSetActive }) => {
   const [prizes, setPrizes] = useState<Prize[]>([]);
-  const [newPrize, setNewPrize] = useState<Omit<Prize, 'id'>>({ name: '', backgroundColor: '#FFFFFF', probability: 10 });
+  const [templateName, setTemplateName] = useState('');
+  const [newPrize, setNewPrize] = useState<Omit<Prize, 'id' | 'roulette_id'>>({ name: '', backgroundColor: '#FFFFFF', probability: 10 });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string>('');
 
   useEffect(() => {
     const fetchPrizes = async () => {
+      if (!templateId) return;
       try {
-        const response = await fetch(`${API_URL}/configuracion`);
+        const response = await fetch(`${API_URL}/roulettes/${templateId}`)
         const data = await response.json();
         setPrizes(data.prizes || []);
+        setTemplateName(data.name);
       } catch (error) {
         console.error('Failed to fetch prizes', error);
       }
     };
     fetchPrizes();
-  }, []);
+  }, [templateId]);
 
   const handleSaveConfiguration = async () => {
     setIsLoading(true);
     setFeedback('');
     try {
-      const response = await fetch(`${API_URL}/configuracion`, {
-        method: 'POST',
+      const response = await fetch(`${API_URL}/roulettes/${templateId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prizes }),
+        body: JSON.stringify({ name: templateName, prizes }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message);
-      setFeedback('Configuration saved!');
+      setFeedback('Template saved!');
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Failed to save.');
     } finally {
@@ -48,7 +59,7 @@ export const PrizeManager: React.FC = () => {
 
   const handleAddPrize = () => {
     if (newPrize.name.trim() === '') return;
-    setPrizes([...prizes, { ...newPrize, probability: Number(newPrize.probability) || 0 }]);
+    setPrizes([...prizes, { ...newPrize, probability: Number(newPrize.probability) || 0, roulette_id: templateId }]);
     setNewPrize({ name: '', backgroundColor: '#FFFFFF', probability: 10 });
   };
 
@@ -69,8 +80,16 @@ export const PrizeManager: React.FC = () => {
   };
 
   return (
-    <div className="mt-12 p-6 bg-gray-800 rounded-lg">
-      <h2 className="text-2xl font-bold mb-4">Prize Configuration</h2>
+    <div className="mt-6 p-6 bg-gray-800 rounded-lg border border-gray-700">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-2xl font-bold">Editing Template:</h3>
+        <input
+          type="text"
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          className="bg-gray-700 p-2 rounded text-2xl font-bold"
+        />
+      </div>
 
       {/* Prize List */}
       <div className="space-y-2 mb-6">
@@ -110,7 +129,7 @@ export const PrizeManager: React.FC = () => {
       </div>
 
       {/* Save Button */}
-      <div className="mt-6">
+      <div className="mt-6 flex justify-between items-center">
         <button
           onClick={handleSaveConfiguration}
           disabled={isLoading}
@@ -118,6 +137,18 @@ export const PrizeManager: React.FC = () => {
         >
           Save Configuration
         </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={onSetActive}
+            disabled={isLoading || isActive}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+          >
+            {isActive ? 'Is Active' : 'Set as Active'}
+          </button>
+          <button onClick={onDelete} disabled={isLoading} className="bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded disabled:opacity-50">
+            Delete Template
+          </button>
+        </div>
         {feedback && <p className="mt-2 text-sm text-purple-300">{feedback}</p>}
       </div>
     </div>
