@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PrizeManager } from './prize-manager';
+import { TemplateManager } from './template-manager';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -57,7 +57,7 @@ export const AdminPanel: React.FC = () => {
         </div>
         {feedback && <p className="mt-4 text-sm">{feedback}</p>}
       </div>
-      <PrizeManager />
+      <TemplateManager />
     </div>
   );
 };
