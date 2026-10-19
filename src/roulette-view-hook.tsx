@@ -12,17 +12,32 @@ interface RouletteState {
 
 const API_URL = "http://localhost:3001/api";
 
+// Hook para manejar el tamaño de la ventana
+const useWindowSize = () => {
+	const [size, setSize] = useState([window.innerWidth, window.innerHeight]);
+	useEffect(() => {
+		const handleResize = () => {
+			setSize([window.innerWidth, window.innerHeight]);
+		};
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
+	return size;
+};
+
 const RouletteGame: React.FC<{
 	items: RouletteItem[];
 	onPrizeWon: (prize: string) => void;
 	isPaused: boolean;
-}> = ({ items, onPrizeWon, isPaused }) => {
+	size: number;
+}> = ({ items, onPrizeWon, isPaused, size }) => {
 	const { roulette, onStart, onStop } = useRoulette({
 		items,
 		onSpinEnd: (result: string) => {
 			onPrizeWon(result);
 		},
 		options: {
+			size, // Usamos el tamaño dinámico
 			style: {
 				canvas: {
 					bg: "transparent",
@@ -44,9 +59,7 @@ const RouletteGame: React.FC<{
 	useEffect(() => {
 		const pollInterval = setInterval(async () => {
 			try {
-				if (isPaused) {
-					return;
-				}
+				if (isPaused) return;
 
 				const response = await fetch(`${API_URL}/state`);
 				if (!response.ok) return;
@@ -62,45 +75,46 @@ const RouletteGame: React.FC<{
 							onStart();
 						}
 					} else if (state.command === "stopped" && isSpinning) {
-						onStop(); // Stop the wheel
+						onStop();
 						setIsSpinning(false);
 					}
 				}
 			} catch (error) {
 				console.error("Polling error:", error);
 			}
-		}, 2000); // Poll every 2 seconds
+		}, 2000);
 
-		return () => {
-			clearInterval(pollInterval);
-		};
+		return () => clearInterval(pollInterval);
 	}, [isSpinning, onStart, onStop, isPaused]);
 
 	return <Roulette roulette={roulette} />;
 };
 
 export const RouletteViewHook: React.FC = () => {
+	const [width, height] = useWindowSize();
 	const [rouletteItems, setRouletteItems] = useState<RouletteItem[] | null>(
 		null,
 	);
 	const [finalResult, setFinalResult] = useState<string | null>(null);
 	const isModalOpen = finalResult !== null;
 
+	// Calcula el tamaño de la ruleta para que sea responsiva
+	const rouletteSize = Math.min(width, height) * 0.8;
+
 	useEffect(() => {
 		const fetchPrizes = async () => {
-			// No actualizamos la configuración si el modal está abierto
-			if (isModalOpen) {
-				return;
-			}
+			if (isModalOpen) return;
 
 			try {
 				const response = await fetch(`${API_URL}/configuracion`);
 				const data = await response.json();
-				const formattedPrizes = (data.prizes || []).map((p: any) => ({
-					name: p.name,
-					bg: p.backgroundColor,
-					weight: p.probability,
-				}));
+				const formattedPrizes: RouletteItem[] = (data.prizes || []).map(
+					(p: any) => ({
+						name: p.name,
+						bg: p.backgroundColor,
+						weight: p.probability,
+					}),
+				);
 				setRouletteItems(formattedPrizes);
 			} catch (error) {
 				console.error("Failed to fetch prizes", error);
@@ -110,15 +124,16 @@ export const RouletteViewHook: React.FC = () => {
 		fetchPrizes();
 		const configPollInterval = setInterval(fetchPrizes, 5000);
 		return () => clearInterval(configPollInterval);
-	}, [isModalOpen]); // Dependemos del estado del modal para reanudar el sondeo
+	}, [isModalOpen]);
 
 	return (
-		<div>
+		<div className="w-full h-screen flex flex-col items-center justify-center">
 			{rouletteItems ? (
 				<RouletteGame
 					items={rouletteItems}
 					onPrizeWon={setFinalResult}
 					isPaused={isModalOpen}
+					size={rouletteSize}
 				/>
 			) : (
 				<p>Cargando ruleta...</p>

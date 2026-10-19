@@ -1,24 +1,29 @@
-import { cn } from "@/lib/utils";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo.webp";
+import { Maximize, Minimize } from "lucide-react";
+import { Button } from "./ui/button";
+import { useFullscreen } from "../hooks/use-fullscreen";
 
-export function Layout({
-	children,
-	className,
-}: {
-	children: React.ReactNode;
-	className?: string;
-}) {
+export function Layout({ children }: { children: React.ReactNode }) {
+	const { isFullscreen, toggleFullscreen } = useFullscreen();
 	return (
-		<div
-			className={cn(
-				"flex flex-col items-center w-full min-h-screen bg-background bg-linear-to-br from-background to-muted px-8",
-				className,
-			)}
-		>
-			<header className="w-full flex justify-start max-w-4xl">
-				<img src={logo} alt="Logo de Keyton" width={100} />
+		<main className="dark bg-background text-foreground min-h-screen w-full relative">
+			<header className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-20">
+				<img src={logo} width={120} alt="Logo de Keyton" height={20} />
+				<Button
+					variant="outline"
+					size="icon"
+					onClick={toggleFullscreen}
+					className="z-30"
+				>
+					{isFullscreen ? (
+						<Minimize className="h-4 w-4" />
+					) : (
+						<Maximize className="h-4 w-4" />
+					)}
+				</Button>
 			</header>
+
 			{children}
-		</div>
+		</main>
 	);
 }

@@ -40,7 +40,7 @@ export const AdminPanel: React.FC = () => {
 
 	return (
 		<div className="px-4 w-full py-2 min-h-screen">
-			<h1 className="text-3xl font-bold mb-6">Panel de Control</h1>
+			<h1 className="text-3xl font-bold mb-6 mt-15">Panel de Control</h1>
 			<div className="space-y-4 max-w-md">
 				<div className="flex items-center justify-center space-x-4">
 					<Button
