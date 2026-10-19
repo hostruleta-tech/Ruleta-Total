@@ -1,6 +1,5 @@
 import { AdminPanel } from './admin-panel';
 import { RouletteViewHook } from './roulette-view-hook';
-import './App.css';
 
 function App() {
   const path = window.location.pathname;
