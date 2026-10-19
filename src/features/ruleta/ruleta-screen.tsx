@@ -491,7 +491,6 @@ export const RouletteViewHook: React.FC = () => {
 			{isModalOpen && (
 				<PrizeModal
 					prize={finalResult}
-					claimCode={claimCode}
 					prizeColor={winnerColor}
 					onClose={() => setFinalResult(null)}
 				/>
