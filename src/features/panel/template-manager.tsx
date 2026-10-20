@@ -10,6 +10,7 @@ import {
 	SelectValue,
 } from "@/shared/ui/select";
 import { AdminHelp } from "./admin-help";
+import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
 import {
@@ -29,6 +30,7 @@ interface RouletteTemplate {
 
 export const TemplateManager: React.FC = () => {
 	const toast = useToast();
+	const { operatorFetch } = useOperatorAuth();
 	const [templates, setTemplates] = useState<RouletteTemplate[]>([]);
 	const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
 		null,
@@ -64,16 +66,28 @@ export const TemplateManager: React.FC = () => {
 		const name = newTemplateName.trim();
 		if (!name) return;
 		try {
-			await apiFetch("/roulettes", {
+			const response = await operatorFetch("/roulettes", {
 				method: "POST",
 				body: JSON.stringify({ name, prizes: [] }),
 			});
+			if (!response) return;
+			if (!response.ok) {
+				const error = (await response.json().catch(() => null)) as {
+					message?: string;
+				} | null;
+				throw new Error(error?.message);
+			}
 			setNewTemplateName("");
 			setShowCreateForm(false);
 			fetchTemplates();
 			toast.success(`Plantilla "${name}" creada.`);
-		} catch {
-			toast.error("No se pudo crear la plantilla.");
+		} catch (error) {
+			toast.error(
+				translateMessage(
+					error instanceof Error ? error.message : undefined,
+					"No se pudo crear la plantilla.",
+				),
+			);
 		}
 	};
 
@@ -83,9 +97,10 @@ export const TemplateManager: React.FC = () => {
 		)
 			return;
 		try {
-			const response = await apiFetch(`/roulettes/${id}`, {
+			const response = await operatorFetch(`/roulettes/${id}`, {
 				method: "DELETE",
 			});
+			if (!response) return;
 			if (!response.ok) {
 				const error = await response.json();
 				throw new Error(error.message);
@@ -105,11 +120,25 @@ export const TemplateManager: React.FC = () => {
 
 	const handleSetActive = async (id: number) => {
 		try {
-			await apiFetch(`/roulettes/active/${id}`, { method: "POST" });
+			const response = await operatorFetch(`/roulettes/active/${id}`, {
+				method: "POST",
+			});
+			if (!response) return;
+			if (!response.ok) {
+				const error = (await response.json().catch(() => null)) as {
+					message?: string;
+				} | null;
+				throw new Error(error?.message);
+			}
 			fetchTemplates();
 			toast.success("Plantilla marcada como activa.");
-		} catch {
-			toast.error("No se pudo marcar la plantilla como activa.");
+		} catch (error) {
+			toast.error(
+				translateMessage(
+					error instanceof Error ? error.message : undefined,
+					"No se pudo marcar la plantilla como activa.",
+				),
+			);
 		}
 	};
 

@@ -5,7 +5,8 @@ export const API_URL = "/api";
 
 /**
  * Petición al backend con JSON por defecto.
- * La API es pública: no hay autenticación ni tokens de sesión.
+ * La ruleta pública no usa sesión; las acciones de administración añaden la
+ * cabecera X-Operator-Password desde el panel.
  */
 export async function apiFetch(
   path: string,

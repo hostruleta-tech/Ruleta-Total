@@ -1,5 +1,6 @@
 import "./env";
 import { createClient, type Client } from "@libsql/client/web";
+import { runMigrations } from "./migrations";
 import { SEED_TEMPLATES } from "./seed-data";
 
 export interface Prize {
@@ -110,6 +111,12 @@ async function ensureInitialized(): Promise<Client> {
 			console.log("[db] Columna 'image' agregada a la tabla prizes.");
 		}
 
+		// Migraciones del sistema de tickets (idempotentes).
+		const appliedMigrations = await runMigrations(client);
+		for (const id of appliedMigrations) {
+			console.log(`[db] Migración aplicada: ${id}`);
+		}
+
 		// Auto-seed solo si la base está totalmente vacía.
 		const countResult = await client.execute(
 			"SELECT COUNT(*) AS total FROM roulettes",
@@ -156,7 +163,7 @@ async function ensureInitialized(): Promise<Client> {
 	}
 }
 
-async function getDb(): Promise<Client> {
+export async function getDb(): Promise<Client> {
 	return ensureInitialized();
 }
 

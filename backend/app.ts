@@ -5,12 +5,15 @@ import {
   deleteRoulette,
   getActiveRouletteWithPrizes,
   getAllRoulettes,
+  getDb,
   getPrizeImage,
   getRouletteWithPrizes,
   setActiveRoulette,
   type Prize,
   updateRoulette,
 } from "./database";
+import { requireOperatorPassword } from "./tickets/auth";
+import { createTicketsRouter } from "./tickets/router";
 
 const router = Router();
 
@@ -96,6 +99,9 @@ function toPublicPrize(prize: Prize) {
 // CORS is handled at the app level in api/index.ts for local dev
 // In production Vercel handles it
 router.use(express.json({ limit: "4mb" }));
+
+// Administración de tickets QR (todas las rutas requieren contraseña).
+router.use("/tickets", createTicketsRouter(getDb));
 
 // Utilidad: sorteo ponderado por probabilidad
 function pickWeightedIndex(prizes: Prize[]): number {
@@ -216,7 +222,7 @@ router.get("/roulettes/:id", async (req, res) => {
   res.json(roulette);
 });
 
-router.post("/roulettes", async (req, res) => {
+router.post("/roulettes", requireOperatorPassword, async (req, res) => {
   try {
     const { name, prizes } = req.body as { name: string; prizes: unknown };
     const newRoulette = await createRoulette(name, sanitizePrizes(prizes));
@@ -230,7 +236,7 @@ router.post("/roulettes", async (req, res) => {
   }
 });
 
-router.put("/roulettes/:id", async (req, res) => {
+router.put("/roulettes/:id", requireOperatorPassword, async (req, res) => {
   try {
     const { name, prizes } = req.body as { name: string; prizes: unknown };
     const updatedRoulette = await updateRoulette(
@@ -248,7 +254,7 @@ router.put("/roulettes/:id", async (req, res) => {
   }
 });
 
-router.delete("/roulettes/:id", async (req, res) => {
+router.delete("/roulettes/:id", requireOperatorPassword, async (req, res) => {
   try {
     await deleteRoulette(Number(req.params.id));
     res.status(204).send();
@@ -259,7 +265,7 @@ router.delete("/roulettes/:id", async (req, res) => {
   }
 });
 
-router.post("/roulettes/active/:id", async (req, res) => {
+router.post("/roulettes/active/:id", requireOperatorPassword, async (req, res) => {
   await setActiveRoulette(Number(req.params.id));
   res.status(200).json({ message: "Active roulette updated." });
 });

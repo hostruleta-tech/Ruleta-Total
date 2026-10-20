@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/shared/api";
 import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
 import { PrizeImageInput } from "./prize-image-input";
+import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
 import {
@@ -49,6 +50,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const toast = useToast();
+	const { operatorFetch } = useOperatorAuth();
 
 	useEffect(() => {
 		const fetchPrizes = async () => {
@@ -74,10 +76,11 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const handleSaveConfiguration = async () => {
 		setIsLoading(true);
 		try {
-			const response = await apiFetch(`/roulettes/${templateId}`, {
+			const response = await operatorFetch(`/roulettes/${templateId}`, {
 				method: "PUT",
 				body: JSON.stringify({ name: templateName, prizes }),
 			});
+			if (!response) return;
 			const result = await response.json();
 			if (!response.ok) throw new Error(result.message);
 			toast.success("Cambios guardados.");
