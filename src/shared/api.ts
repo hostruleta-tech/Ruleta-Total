@@ -1,7 +1,7 @@
 // URL del backend API.
 // En desarrollo: proxied via Vite a http://localhost:3001
-// En producción (Vercel): mismo dominio, reescrito a la función serverless
-export const API_URL = "/api-ruleta";
+// En producción (Vercel): mismo dominio, función serverless catch-all en /api
+export const API_URL = "/api";
 
 const ADMIN_SESSION_KEY = "admin_session";
 
