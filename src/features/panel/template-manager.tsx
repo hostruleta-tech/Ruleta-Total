@@ -1,6 +1,6 @@
 import { CheckCircle2, LayoutTemplate, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { adminFetch } from "@/shared/api";
+import { apiFetch } from "@/shared/api";
 import { cn } from "@/shared/lib/utils";
 import {
 	Select,
@@ -41,7 +41,7 @@ export const TemplateManager: React.FC = () => {
 
 	const fetchTemplates = async () => {
 		try {
-			const response = await adminFetch("/roulettes");
+			const response = await apiFetch("/roulettes");
 			const data: RouletteTemplate[] = await response.json();
 			setTemplates(data);
 			setSelectedTemplateId((current) => {
@@ -64,7 +64,7 @@ export const TemplateManager: React.FC = () => {
 		const name = newTemplateName.trim();
 		if (!name) return;
 		try {
-			await adminFetch("/roulettes", {
+			await apiFetch("/roulettes", {
 				method: "POST",
 				body: JSON.stringify({ name, prizes: [] }),
 			});
@@ -83,7 +83,7 @@ export const TemplateManager: React.FC = () => {
 		)
 			return;
 		try {
-			const response = await adminFetch(`/roulettes/${id}`, {
+			const response = await apiFetch(`/roulettes/${id}`, {
 				method: "DELETE",
 			});
 			if (!response.ok) {
@@ -105,7 +105,7 @@ export const TemplateManager: React.FC = () => {
 
 	const handleSetActive = async (id: number) => {
 		try {
-			await adminFetch(`/roulettes/active/${id}`, { method: "POST" });
+			await apiFetch(`/roulettes/active/${id}`, { method: "POST" });
 			fetchTemplates();
 			toast.success("Plantilla marcada como activa.");
 		} catch {

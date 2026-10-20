@@ -126,6 +126,15 @@
     @apply border-border outline-ring/50;
   }
 
+  html {
+    background-color: #e6edef;
+  }
+
+  body,
+  #root {
+    min-height: 100dvh;
+  }
+
   body {
     @apply bg-background text-foreground;
   }

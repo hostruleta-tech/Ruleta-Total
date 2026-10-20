@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import express, { Router } from "express";
-import { adminLogin, requireAdmin } from "./auth";
 import {
   createRoulette,
   deleteRoulette,
@@ -17,17 +16,6 @@ const router = Router();
 // CORS is handled at the app level in api/index.ts for local dev
 // In production Vercel handles it
 router.use(express.json());
-
-// Login del panel: valida usuario/contraseña y devuelve un token de sesión.
-router.post("/admin/login", adminLogin);
-
-// Admin auth check endpoint (protected)
-router.get("/admin/session", requireAdmin, (_req, res) => {
-  res.json({ ok: true });
-});
-
-// Protect all /roulettes* routes
-router.use("/roulettes", requireAdmin);
 
 // Utilidad: sorteo ponderado por probabilidad
 function pickWeightedIndex(prizes: Prize[]): number {

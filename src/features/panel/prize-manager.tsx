@@ -1,6 +1,6 @@
 import { Pencil, Plus, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { adminFetch } from "@/shared/api";
+import { apiFetch } from "@/shared/api";
 import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
@@ -50,7 +50,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		const fetchPrizes = async () => {
 			if (!templateId) return;
 			try {
-				const response = await adminFetch(`/roulettes/${templateId}`);
+				const response = await apiFetch(`/roulettes/${templateId}`);
 				const data = await response.json();
 				const loadedPrizes: Prize[] = data.prizes || [];
 				setPrizes(loadedPrizes);
@@ -70,7 +70,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const handleSaveConfiguration = async () => {
 		setIsLoading(true);
 		try {
-			const response = await adminFetch(`/roulettes/${templateId}`, {
+			const response = await apiFetch(`/roulettes/${templateId}`, {
 				method: "PUT",
 				body: JSON.stringify({ name: templateName, prizes }),
 			});

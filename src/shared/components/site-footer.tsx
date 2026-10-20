@@ -3,9 +3,14 @@ import logoTotal from "@/assets/logotipo-total.png";
 
 interface SiteFooterProps {
   className?: string;
+  /** Respeta el gesto/barra inferior cuando la app va a pantalla completa. */
+  safeArea?: boolean;
 }
 
-export const SiteFooter: React.FC<SiteFooterProps> = ({ className = "" }) => {
+export const SiteFooter: React.FC<SiteFooterProps> = ({
+  className = "",
+  safeArea = false,
+}) => {
   return (
     <footer
       className={`flex items-center justify-between relative overflow-hidden ${className}`}
@@ -13,6 +18,9 @@ export const SiteFooter: React.FC<SiteFooterProps> = ({ className = "" }) => {
         backgroundColor: "#011d21",
         borderTop: "1.5px solid #00565e",
         padding: "10px 18px",
+        paddingBottom: safeArea
+          ? "calc(10px + env(safe-area-inset-bottom))"
+          : undefined,
       }}
       role="contentinfo"
     >

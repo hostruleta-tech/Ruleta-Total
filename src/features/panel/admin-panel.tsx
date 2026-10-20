@@ -1,14 +1,8 @@
-import { LogOut } from "lucide-react";
-import { AdminAuthProvider } from "./admin-auth";
-import { useAdminAuth } from "./admin-auth-context";
 import { PanelShell } from "./panel-shell";
 import { ToastProvider } from "./panel-toast";
-import { BrandButton } from "./panel-ui";
 import { TemplateManager } from "./template-manager";
 
 const AdminPanelContent: React.FC = () => {
-	const { logout } = useAdminAuth();
-
 	return (
 		<PanelShell badge="Panel del Operador">
 			<div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 px-4 py-5 sm:px-6 md:py-6 lg:px-10">
@@ -28,11 +22,6 @@ const AdminPanelContent: React.FC = () => {
 							desde su teléfono.
 						</p>
 					</div>
-
-					<BrandButton variant="ghost" size="sm" onClick={logout}>
-						<LogOut className="h-4 w-4" />
-						Cerrar sesión
-					</BrandButton>
 				</div>
 
 				{/* Plantillas + editor de premios */}
@@ -44,8 +33,6 @@ const AdminPanelContent: React.FC = () => {
 
 export const AdminPanel: React.FC = () => (
 	<ToastProvider>
-		<AdminAuthProvider>
-			<AdminPanelContent />
-		</AdminAuthProvider>
+		<AdminPanelContent />
 	</ToastProvider>
 );

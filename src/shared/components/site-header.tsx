@@ -11,6 +11,8 @@ interface SiteHeaderProps {
   showBadge?: boolean;
   /** Versión compacta (≈50% altura) para páginas que necesitan más espacio. */
   compact?: boolean;
+  /** Respeta el notch/barra de estado cuando la app va a pantalla completa. */
+  safeArea?: boolean;
 }
 
 export const SiteHeader: React.FC<SiteHeaderProps> = ({
@@ -19,6 +21,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   showRibbon = true,
   showBadge = true,
   compact = false,
+  safeArea = false,
 }) => {
   // Diagonal cut values (px from right edge at bottom)
   const cutNormal = 90;
@@ -41,6 +44,9 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
       className={`relative z-40 w-full shrink-0 ${className}`}
       style={{
         padding: compact ? "13px 16px 10px 16px" : "31px 23px 26px 26px",
+        paddingTop: safeArea
+          ? `calc(${compact ? "13px" : "31px"} + env(safe-area-inset-top))`
+          : undefined,
       }}
       role="banner"
     >

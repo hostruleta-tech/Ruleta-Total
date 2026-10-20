@@ -301,15 +301,16 @@ export const RouletteViewHook: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center"
+      className="min-h-dvh w-full flex items-center justify-center overflow-x-hidden bg-[#e6edef] sm:bg-[#0b1416]"
       style={{
-        backgroundColor: "#0b1416",
         fontFamily: APP_FONT_FAMILY,
       }}
     >
       {/* MARCO SIMULADOR MÓVIL */}
       <div
-        className="w-full max-w-[440px] min-h-dvh relative overflow-hidden flex flex-col"
+        className={`w-full min-h-dvh relative overflow-hidden flex flex-col ${
+          isFullscreen ? "max-w-none" : "max-w-none sm:max-w-[440px]"
+        }`}
         style={{
           background:
             "linear-gradient(175deg, #f0f4f5 0%, #e6edef 45%, #d9e4e7 100%)",
@@ -317,7 +318,7 @@ export const RouletteViewHook: React.FC = () => {
         }}
       >
         {/* HEADER COMPARTIDO */}
-        <SiteHeader showRibbon={true} showBadge={false} />
+        <SiteHeader showRibbon={true} showBadge={false} safeArea />
 
         {/* CUERPO PRINCIPAL */}
         <main
@@ -715,7 +716,7 @@ export const RouletteViewHook: React.FC = () => {
         </section>
 
         {/* FOOTER COMPARTIDO */}
-        <SiteFooter />
+        <SiteFooter safeArea />
 
         {/* BOTÓN FLOTANTE PANTALLA COMPLETA - dentro del marco */}
         <button
