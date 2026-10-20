@@ -1,13 +1,7 @@
-import cors from "cors";
 import express from "express";
 import { router } from "../backend/app";
 
 const app = express();
-
-// CORS for local development (Vercel handles CORS in production).
-if (process.env.NODE_ENV !== "production") {
-  app.use(cors({ origin: true, credentials: true }));
-}
 
 app.use(express.json());
 
