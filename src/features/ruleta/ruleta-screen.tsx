@@ -12,6 +12,8 @@ import { PrizeModal } from "./prize-modal";
 import { soundManager } from "@/shared/sound-manager";
 import { useFullscreen } from "@/shared/use-fullscreen";
 import { API_URL } from "@/shared/api";
+import { APP_FONT_FAMILY } from "@/shared/typography";
+import heroTaller from "@/assets/hero-taller.jpg";
 import logoTotal from "@/assets/logotipo-total.png";
 import { SiteHeader } from "@/shared/components/site-header";
 import { SiteFooter } from "@/shared/components/site-footer";
@@ -85,9 +87,9 @@ const RouletteGame: React.FC<{
     options: {
       size,
       style: {
-        canvas: { bg: "transparent" },
+        canvas: { bg: "#ffffff" },
         label: {
-          font: `700 ${Math.max(11, Math.round(size * 0.042))}px "Montserrat Variable", Arial, sans-serif`,
+          font: `800 ${Math.max(11, Math.round(size * 0.042))}px ${APP_FONT_FAMILY}`,
           align: "center",
           baseline: "middle",
           offset: 0.7,
@@ -124,8 +126,8 @@ const RouletteGame: React.FC<{
               "linear-gradient(135deg, #232a2f 0%, #6f7b84 40%, #cfd7db 62%, #171c1f 100%)",
           }}
         >
-          {/* BORDE FINO BLANCO */}
-          <div className="rounded-full bg-slate-900/25 p-[2px] overflow-hidden flex items-center justify-center">
+          {/* CAPA BLANCA BAJO LA RULETA (evita que se cuele el fondo) */}
+          <div className="rounded-full bg-white p-[2px] overflow-hidden flex items-center justify-center">
             <Roulette roulette={roulette} />
           </div>
         </div>
@@ -302,7 +304,7 @@ export const RouletteViewHook: React.FC = () => {
       className="min-h-screen w-full flex items-center justify-center"
       style={{
         backgroundColor: "#0b1416",
-        fontFamily: '"Montserrat Variable", sans-serif',
+        fontFamily: APP_FONT_FAMILY,
       }}
     >
       {/* MARCO SIMULADOR MÓVIL */}
@@ -319,15 +321,38 @@ export const RouletteViewHook: React.FC = () => {
 
         {/* CUERPO PRINCIPAL */}
         <main
-          className="flex-1 flex flex-col items-center relative"
+          className="flex-1 flex flex-col items-center relative isolate"
           style={{
             padding: "20px 20px 15px 20px",
             background:
               "radial-gradient(circle at 50% 30%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 65%), linear-gradient(135deg, rgba(230, 240, 243, 0.5) 0%, rgba(200, 218, 222, 0.5) 100%)",
           }}
         >
+          {/* IMAGEN DECORATIVA DIFUMINADA - ESQUINA SUPERIOR DERECHA */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none select-none absolute top-0 right-0 z-0 w-[52%] max-w-[230px] aspect-square overflow-hidden"
+            style={{
+              opacity: 0.45,
+              filter: "blur(7px) saturate(1)",
+              maskImage:
+                "radial-gradient(circle closest-side at 50% 50%, black 0%, black 42%, transparent 100%)",
+              WebkitMaskImage:
+                "radial-gradient(circle closest-side at 50% 50%, black 0%, black 42%, transparent 100%)",
+            }}
+          >
+            <img
+              src={heroTaller}
+              alt=""
+              draggable={false}
+              decoding="async"
+              fetchPriority="low"
+              className="h-full w-full scale-110 object-cover object-center"
+            />
+          </div>
+
           {/* TÍTULOS - no se encogen */}
-          <section className="shrink-0 w-full text-left mb-[10px]">
+          <section className="relative z-10 shrink-0 w-full text-left mb-[10px]">
             <h1
               className="text-[32px] font-black italic leading-none tracking-tight"
               style={{ letterSpacing: "-0.5px" }}
@@ -350,7 +375,7 @@ export const RouletteViewHook: React.FC = () => {
           {/* ÁREA RESERVADA PARA LA RULETA - ocupa todo el espacio vertical libre */}
           <section
             ref={wheelAreaRef}
-            className="w-full flex-1 min-h-0 flex items-center justify-center px-2"
+            className="relative z-10 w-full flex-1 min-h-0 flex items-center justify-center px-2"
           >
             {rouletteItems ? (
               <RouletteGame
@@ -372,7 +397,7 @@ export const RouletteViewHook: React.FC = () => {
           </section>
 
           {/* BOTÓN GIRAR RULETA + TARJETA PREMIO - no se encogen */}
-          <div className="shrink-0 w-full flex flex-col items-center gap-[10px]">
+          <div className="relative z-10 shrink-0 w-full flex flex-col items-center gap-[10px]">
             {/* BOTÓN GIRAR RULETA */}
             <button
               onClick={handleSpin}

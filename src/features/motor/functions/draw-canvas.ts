@@ -15,9 +15,30 @@ import {
   degreesToCanvasRadians,
 } from "./utils";
 
+/** Texto oscuro de marca para fondos claros (evita el negro puro). */
+const DARK_TEXT_COLOR = "#063f43";
+
+const channelLuminance = (value: number) => {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+
+const relativeLuminance = (r: number, g: number, b: number) =>
+  0.2126 * channelLuminance(r) +
+  0.7152 * channelLuminance(g) +
+  0.0722 * channelLuminance(b);
+
+const contrastRatio = (first: number, second: number) => {
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+const DARK_TEXT_LUMINANCE = relativeLuminance(0x06, 0x3f, 0x43);
+
 /**
  * Devuelve el color de texto con mayor contraste para un fondo dado.
- * Fondos oscuros → texto blanco; fondos claros → texto oscuro.
+ * Fondos oscuros → texto blanco; fondos claros → verde oscuro de marca.
  */
 const getContrastColor = (background: string): string => {
   const hex = background.trim().replace("#", "");
@@ -30,24 +51,20 @@ const getContrastColor = (background: string): string => {
       : hex;
 
   if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    return "#111111";
+    return DARK_TEXT_COLOR;
   }
 
   const r = Number.parseInt(normalized.slice(0, 2), 16);
   const g = Number.parseInt(normalized.slice(2, 4), 16);
   const b = Number.parseInt(normalized.slice(4, 6), 16);
 
-  const channel = (value: number) => {
-    const c = value / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
+  const luminance = relativeLuminance(r, g, b);
+  const contrastWithWhite = contrastRatio(luminance, 1);
+  const contrastWithDarkText = contrastRatio(luminance, DARK_TEXT_LUMINANCE);
 
-  const luminance =
-    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-  const contrastWithWhite = 1.05 / (luminance + 0.05);
-  const contrastWithBlack = (luminance + 0.05) / 0.05;
-
-  return contrastWithBlack >= contrastWithWhite ? "#111111" : "#FFFFFF";
+  return contrastWithDarkText >= contrastWithWhite
+    ? DARK_TEXT_COLOR
+    : "#FFFFFF";
 };
 
 interface ArrowParams {
@@ -101,9 +118,11 @@ export interface DrawPieLabel {
 const FONT_SIZE_PATTERN = /\d+(?:\.\d+)?px/;
 
 /**
- * Dibuja el nombre del premio SIEMPRE en horizontal (sin rotación), de forma
- * que cuando el segmento quede bajo la flecha superior el texto se lea derecho.
- * Si el nombre no cabe en el ancho del segmento, se reduce el tamaño de fuente
+ * Dibuja el nombre del premio pegado a su sector: la palabra gira con la rueda
+ * y sigue el arco (orientación tangencial). Así, cuando el sector queda bajo la
+ * flecha superior el texto se lee horizontal, y en la parte inferior aparece
+ * boca abajo, como en una ruleta física.
+ * Si el nombre no cabe en el arco del sector, se reduce el tamaño de fuente
  * (sin deformar el texto) hasta que entre.
  */
 const drawPieLabel = ({
@@ -114,23 +133,25 @@ const drawPieLabel = ({
   anglePerSegment,
   style,
 }: DrawPieLabel): void => {
-  const { labelX, labelY } = calculateLabelPosition({
+  const { labelX, labelY, labelAngle } = calculateLabelPosition({
     geometry,
     segmentStartAngle,
     anglePerSegment,
     labelOffset: style.label.offset,
   });
 
-  // Ancho disponible: el menor entre el arco del segmento en ese radio y la
-  // distancia radial hasta el borde de la rueda (para no salirse del círculo).
+  // Ancho disponible: el arco del sector en el radio de la etiqueta. La palabra
+  // corre en dirección tangencial, es decir, a lo largo de ese arco.
   const labelRadius = geometry.radius * style.label.offset;
   const arcWidth =
     labelRadius * ((anglePerSegment * Math.PI) / 180) * 0.92;
-  const radialWidth = 2 * (geometry.radius * 0.985 - labelRadius);
-  const maxWidth = Math.max(16, Math.min(arcWidth, radialWidth));
+  const maxWidth = Math.max(16, arcWidth);
 
   context.save();
-  context.translate(labelX, labelY);
+  // Matriz fijada desde cero y giro tangencial (+90° sobre el ángulo del
+  // sector): el texto queda anclado a su porción y gira con la rueda.
+  context.setTransform(1, 0, 0, 1, labelX, labelY);
+  context.rotate(labelAngle + Math.PI / 2);
   context.textAlign = "center";
   context.textBaseline = style.label.baseline;
   context.fillStyle = pie.color;

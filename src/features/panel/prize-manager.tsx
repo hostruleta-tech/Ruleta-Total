@@ -22,16 +22,19 @@ export interface Prize {
 
 interface PrizeManagerProps {
 	templateId: number;
-	isActive: boolean;
-	onDelete: () => void;
-	onSetActive: () => void;
+	/** Se invoca después de guardar para refrescar el nombre en el selector. */
+	onSaved?: () => void;
 }
+
+/** Rejilla compartida por las filas de premio y la fila de alta. */
+const ROW_BASE =
+	"grid grid-cols-[3rem_minmax(0,1fr)_3.5rem_2.25rem] items-center gap-2";
+const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_2.5rem]`;
+const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_auto]`;
 
 export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	templateId,
-	isActive,
-	onDelete,
-	onSetActive,
+	onSaved,
 }) => {
 	const [prizes, setPrizes] = useState<Prize[]>([]);
 	const [templateName, setTemplateName] = useState("");
@@ -74,6 +77,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			const result = await response.json();
 			if (!response.ok) throw new Error(result.message);
 			toast.success("Cambios guardados.");
+			onSaved?.();
 		} catch (error) {
 			toast.error(
 				translateMessage(
@@ -149,65 +153,74 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	})();
 
 	return (
-		<BrandCard>
-			<SectionHeading
-				icon={Pencil}
-				title="Editar plantilla"
-				subtitle={`Luego de hacer los cambios toca en "Guardar cambios".`}
-			/>
+		<div className="flex min-w-0 flex-col gap-3">
+			<BrandCard>
+				<SectionHeading
+					icon={Pencil}
+					title="Editar premios"
+					subtitle={`Luego de hacer los cambios toca en "Guardar cambios".`}
+				/>
 
-			<div className="mt-5 space-y-5">
-				{/* Nombre de la plantilla */}
-				<div className="grid max-w-md gap-1.5">
-					<BrandLabel htmlFor="template-name">
-						Nombre de la plantilla
-					</BrandLabel>
-					<BrandInput
-						id="template-name"
-						type="text"
-						value={templateName}
-						onChange={(e) => setTemplateName(e.target.value)}
-					/>
-				</div>
+				<div className="mt-4 space-y-4">
+					{/* Nombre de la plantilla */}
+					<div className="grid max-w-md gap-1.5">
+						<BrandLabel htmlFor="template-name">
+							Nombre de la plantilla
+						</BrandLabel>
+						<BrandInput
+							id="template-name"
+							type="text"
+							value={templateName}
+							onChange={(e) => setTemplateName(e.target.value)}
+							className="h-9"
+						/>
+					</div>
 
-				{/* Lista de premios */}
-				<div className="space-y-3">
-					{totalWeight > 0 && (
-						<div className="rounded-xl bg-teal-50 border border-teal-200 p-3 text-sm">
-							<div className="flex flex-wrap items-center gap-4 text-teal-700">
-								<span className="font-medium">
-									Total de pesos: <span className="font-mono">{totalWeight}</span>
-								</span>
-								<span className="text-teal-600">
-									Modelo A (pesos libres): cada número es un peso relativo, no un % fijo.
-								</span>
-							</div>
+					{/* Resumen de pesos */}
+					<div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs">
+						<span className="font-medium text-teal-700">
+							Total de pesos: <span className="font-mono">{totalWeight}</span>
+						</span>
+						<span className="text-teal-600">
+							Modelo A: cada número es un peso relativo, no un % fijo.
+						</span>
+					</div>
+
+					{/* Lista de premios */}
+					<div className="space-y-2">
+						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
+							<span>Nombre</span>
+							<span>Color</span>
+							<span>Peso</span>
+							<span className="text-center">Real</span>
+							<span className="sr-only">Acciones</span>
 						</div>
-					)}
-					{prizes.map((prize, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: es la manera de identificar
-						<div
-							key={index}
-							className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 md:p-4"
-						>
-							<div className="flex flex-wrap items-end gap-3">
-								<div className="grid min-w-[160px] flex-1 gap-1.5">
-									<BrandLabel htmlFor={`prize-name-${index}`}>
-										Nombre
-									</BrandLabel>
-									<BrandInput
-										id={`prize-name-${index}`}
-										type="text"
-										value={prize.name}
-										onChange={(e) =>
-											handlePrizeChange(index, "name", e.target.value)
-										}
-									/>
-								</div>
-								<div className="grid w-24 gap-1.5">
-									<BrandLabel htmlFor={`prize-color-${index}`}>
-										Color
-									</BrandLabel>
+
+						<div className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50/60 px-2 md:px-3">
+							{prizes.length === 0 && (
+								<p className="py-5 text-center text-sm text-slate-500">
+									Aún no hay premios. Agrega el primero abajo.
+								</p>
+							)}
+
+							{prizes.map((prize, index) => (
+								<div
+									// biome-ignore lint/suspicious/noArrayIndexKey: es la manera de identificar
+									key={index}
+									className={`${ROW_GRID} py-2 md:py-1.5`}
+								>
+									<div className="col-span-4 md:col-span-1">
+										<BrandInput
+											id={`prize-name-${index}`}
+											type="text"
+											value={prize.name}
+											onChange={(e) =>
+												handlePrizeChange(index, "name", e.target.value)
+											}
+											className="h-9"
+											aria-label={`Nombre del premio ${index + 1}`}
+										/>
+									</div>
 									<BrandColorInput
 										id={`prize-color-${index}`}
 										value={prize.backgroundColor}
@@ -218,12 +231,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 												e.target.value,
 											)
 										}
+										className="h-9"
+										aria-label={`Color del premio ${index + 1}`}
 									/>
-								</div>
-								<div className="grid w-28 gap-1.5">
-									<BrandLabel htmlFor={`prize-probability-${index}`}>
-										Probabilidad
-									</BrandLabel>
 									<BrandInput
 										id={`prize-probability-${index}`}
 										type="number"
@@ -235,43 +245,46 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 												Number(e.target.value),
 											)
 										}
+										className="h-9 text-center"
+										placeholder="Peso"
+										aria-label={`Peso del premio ${index + 1}`}
 									/>
-									<span className="text-[11px] font-medium leading-none text-teal-600">
-										Real: {getRealProbability(prize.probability)}
+									<span
+										className="text-center text-xs font-medium tabular-nums text-teal-600"
+										title={`Probabilidad real del premio ${index + 1}`}
+									>
+										{getRealProbability(prize.probability)}
 									</span>
+									<BrandButton
+										onClick={() => handleRemovePrize(index)}
+										variant="danger"
+										size="icon"
+										className="h-9 w-9"
+										aria-label={`Eliminar premio ${index + 1}`}
+									>
+										<TrashIcon />
+									</BrandButton>
 								</div>
-								<BrandButton
-									onClick={() => handleRemovePrize(index)}
-									variant="danger"
-									size="icon"
-									aria-label="Eliminar premio"
-								>
-									<TrashIcon />
-								</BrandButton>
-							</div>
+							))}
 						</div>
-					))}
-				</div>
+					</div>
 
-				{/* Agregar nuevo premio */}
-				<div className="rounded-2xl border border-dashed border-[#005f63]/40 bg-[#005f63]/5 p-3 md:p-4">
-					<div className="flex flex-wrap items-end gap-3">
-						<div className="grid min-w-[160px] flex-1 gap-1.5">
-							<BrandLabel htmlFor="new-prize-name">
-								Nombre del premio
-							</BrandLabel>
-							<BrandInput
-								id="new-prize-name"
-								type="text"
-								placeholder="Nombre del premio"
-								value={newPrize.name}
-								onChange={(e) =>
-									setNewPrize({ ...newPrize, name: e.target.value })
-								}
-							/>
-						</div>
-						<div className="grid w-24 gap-1.5">
-							<BrandLabel htmlFor="new-prize-color">Color</BrandLabel>
+					{/* Agregar nuevo premio */}
+					<div className="rounded-2xl border border-dashed border-[#005f63]/40 bg-[#005f63]/5 p-2.5 md:p-3">
+						<div className={ADD_ROW_GRID}>
+							<div className="col-span-4 md:col-span-1">
+								<BrandInput
+									id="new-prize-name"
+									type="text"
+									placeholder="Nombre del nuevo premio"
+									value={newPrize.name}
+									onChange={(e) =>
+										setNewPrize({ ...newPrize, name: e.target.value })
+									}
+									className="h-9"
+									aria-label="Nombre del nuevo premio"
+								/>
+							</div>
 							<BrandColorInput
 								id="new-prize-color"
 								value={newPrize.backgroundColor}
@@ -281,16 +294,13 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 										backgroundColor: e.target.value,
 									})
 								}
+								className="h-9"
+								aria-label="Color del nuevo premio"
 							/>
-						</div>
-						<div className="grid w-28 gap-1.5">
-							<BrandLabel htmlFor="new-prize-probability">
-								Probabilidad
-							</BrandLabel>
 							<BrandInput
 								id="new-prize-probability"
 								type="number"
-								placeholder="Probabilidad"
+								placeholder="Peso"
 								value={newPrize.probability}
 								onChange={(e) =>
 									setNewPrize({
@@ -298,54 +308,48 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 										probability: Number(e.target.value),
 									})
 								}
+								className="h-9 text-center"
+								aria-label="Peso del nuevo premio"
 							/>
-							<span className="text-[11px] font-medium leading-none text-teal-600">
-								Real: {newPrizeRealProbability}
+							<span
+								className="text-center text-xs font-medium tabular-nums text-teal-600"
+								title="Probabilidad real del nuevo premio"
+							>
+								{newPrizeRealProbability}
 							</span>
+							<BrandButton
+								onClick={handleAddPrize}
+								variant="outline"
+								size="sm"
+								className="h-9 w-full px-0 md:w-auto md:px-4"
+								aria-label="Agregar premio"
+							>
+								<Plus className="h-4 w-4" />
+								<span className="hidden md:inline">Agregar</span>
+							</BrandButton>
 						</div>
-						<BrandButton onClick={handleAddPrize} variant="outline">
-							<Plus className="h-4 w-4" />
-							Agregar
-						</BrandButton>
 					</div>
 				</div>
-			</div>
+			</BrandCard>
 
-			{/* Acciones */}
-			<div className="mt-6 border-t border-slate-200 pt-5">
-				<div className="flex flex-col gap-3 sm:flex-row">
+			{/* Barra de guardado siempre visible */}
+			<div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-lg backdrop-blur">
+				<div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+					<p className="px-1 text-xs font-medium text-slate-500">
+						{prizes.length} {prizes.length === 1 ? "premio" : "premios"} · Total
+						de pesos{" "}
+						<span className="font-mono text-slate-700">{totalWeight}</span>
+					</p>
 					<BrandButton
 						onClick={handleSaveConfiguration}
 						disabled={isLoading}
-						variant="outline"
-						className="flex-1"
+						size="sm"
+						className="w-full sm:w-auto"
 					>
-						Guardar cambios
-					</BrandButton>
-
-					<BrandButton
-						onClick={() => {
-							if (!isActive) onSetActive();
-						}}
-						disabled={isLoading}
-						variant={isActive ? "light" : "primary"}
-						className="flex-1"
-					>
-						{isActive ? "Está activa" : "Marcar como activa"}
-					</BrandButton>
-				</div>
-
-				<div className="mt-4 flex justify-center">
-					<BrandButton
-						onClick={onDelete}
-						disabled={isLoading}
-						variant="ghost"
-						className="text-[#E52421] hover:bg-[#E52421]/10 hover:text-[#c81d1a]"
-					>
-						Borrar plantilla
+						{isLoading ? "Guardando..." : "Guardar cambios"}
 					</BrandButton>
 				</div>
 			</div>
-		</BrandCard>
+		</div>
 	);
 };

@@ -8,6 +8,11 @@ export const degreesToCanvasRadians = (degrees: number): number => {
   return ((360 - degrees) * Math.PI) / 180;
 };
 
+/**
+ * Punto donde se ancla el nombre del premio: el centro de su sector.
+ * Devuelve además el ángulo (en radianes de canvas) de ese centro, que se usa
+ * para girar el texto junto con su porción (orientación tangencial).
+ */
 export const calculateLabelPosition = ({
   geometry,
   segmentStartAngle,
@@ -122,7 +127,6 @@ export const calculateTargetRotation = ({
   desiredDistance,
   minTurns = 1,
   pointerAngle = POINTER_ANGLE,
-  marginRatio = 0.08,
 }: {
   currentRotation: number;
   winnerIndex: number;
@@ -132,12 +136,13 @@ export const calculateTargetRotation = ({
   desiredDistance: number;
   minTurns?: number;
   pointerAngle?: number;
-  marginRatio?: number;
 }): number => {
   const anglePerSegment = calculateSegmentAngle(itemCount);
 
-  // Posición aleatoria dentro del sector ganador: 0 = un borde, 1 = el otro.
-  const position = marginRatio + Math.random() * (1 - marginRatio * 2);
+  // El puntero aterriza SIEMPRE en el centro del sector ganador: así el nombre
+  // del premio (dibujado en el centro de su sector) queda alineado justo bajo
+  // la flecha, sin desviarse a un borde.
+  const position = 0.5;
 
   // Rotación (mod 360) que deja el puntero en ese punto del sector ganador.
   const desiredAngle =

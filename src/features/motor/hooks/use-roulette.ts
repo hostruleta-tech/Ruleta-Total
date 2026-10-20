@@ -148,15 +148,25 @@ export const useRoulette = ({
     };
 
     // Espera a que la fuente de la app esté disponible antes de dibujar en el
-    // canvas, si no se dibujaría con la fuente de respaldo (Arial).
+    // canvas; si no, se dibujaría con la fuente de respaldo (sans-serif).
     if (typeof document !== "undefined" && document.fonts) {
-      document.fonts
-        .load(mergedOptions.style.label.font)
+      const handleLoadingDone = () => render();
+      document.fonts.addEventListener("loadingdone", handleLoadingDone);
+
+      Promise.all([
+        document.fonts.load(mergedOptions.style.label.font),
+        document.fonts.ready,
+      ])
         .then(render)
         .catch(render);
-    } else {
-      render();
+
+      return () => {
+        cancelled = true;
+        document.fonts.removeEventListener("loadingdone", handleLoadingDone);
+      };
     }
+
+    render();
 
     return () => {
       cancelled = true;
