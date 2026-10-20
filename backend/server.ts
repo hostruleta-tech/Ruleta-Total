@@ -7,7 +7,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "4mb" }));
 
 // Mount the router at /api (frontend) and /api-ruleta (backwards compatibility).
 app.use("/api", router);

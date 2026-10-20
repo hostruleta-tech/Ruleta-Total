@@ -68,5 +68,11 @@ export const defaultOptions: DefaultRouletteOptions = {
         },
       ],
     },
+    image: {
+      offset: 0.78,
+      size: 0.26,
+      shadowColor: "rgba(0, 0, 0, 0.28)",
+      shadowBlur: 4,
+    },
   },
 } as const;

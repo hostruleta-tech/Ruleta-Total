@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type RouletteOptions, defaultOptions } from "../config";
 import { animateRoulette } from "../functions/animation-roulette";
 import { drawCanvas } from "../functions/draw-canvas";
+import { preloadImages } from "../functions/image-cache";
 import { setupCanvas } from "../functions/utils";
 import type { RouletteCanvas, RouletteItem } from "../types";
 
@@ -47,6 +48,10 @@ export const useRoulette = ({
             ...(options.style?.pie?.theme || defaultOptions.style.pie.theme),
           ],
         },
+        image: {
+          ...defaultOptions.style.image,
+          ...options.style?.image,
+        },
       },
     };
   }, [options]);
@@ -90,6 +95,23 @@ export const useRoulette = ({
   });
 
   const [status, setStatus] = useState<"stop" | "running" | "ending">("stop");
+  // Se incrementa cuando terminan de cargar las imágenes, para redibujar la
+  // ruleta quieta con los premios ya completos.
+  const [imageVersion, setImageVersion] = useState(0);
+
+  useEffect(() => {
+    const sources = items.map((item) => item.image);
+    if (!sources.some((source) => Boolean(source))) return;
+
+    let cancelled = false;
+    void preloadImages(sources).then(() => {
+      if (!cancelled) setImageVersion((version) => version + 1);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   // Auto-stop: temporizador para cambiar a "ending" tras spinDuration
   const spinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,7 +193,7 @@ export const useRoulette = ({
     return () => {
       cancelled = true;
     };
-  }, [status, geometry, items, mergedOptions]);
+  }, [status, geometry, items, mergedOptions, imageVersion]);
 
   // Animación en "running" y "ending"
   useEffect(() => {

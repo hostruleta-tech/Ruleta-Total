@@ -47,6 +47,7 @@ async function main() {
             name TEXT NOT NULL,
             backgroundColor TEXT NOT NULL,
             probability REAL NOT NULL,
+            image TEXT,
             FOREIGN KEY (roulette_id) REFERENCES roulettes (id) ON DELETE CASCADE
           )
         `,
@@ -57,6 +58,13 @@ async function main() {
 	);
 
 	console.log("✅ Tables created/verified");
+
+	// Migración: bases creadas antes de la función de imágenes.
+	const prizeColumns = await client.execute("PRAGMA table_info(prizes)");
+	if (!prizeColumns.rows.some((column) => column.name === "image")) {
+		await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
+		console.log("✅ Columna 'image' agregada a la tabla prizes");
+	}
 
 	for (const tmpl of SEED_TEMPLATES) {
 		const existing = await client.execute({

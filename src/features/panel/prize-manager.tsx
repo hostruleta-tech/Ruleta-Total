@@ -2,6 +2,7 @@ import { Pencil, Plus, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/shared/api";
 import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
+import { PrizeImageInput } from "./prize-image-input";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
 import {
@@ -18,6 +19,8 @@ export interface Prize {
 	name: string;
 	backgroundColor: string;
 	probability: number;
+	/** Imagen del premio como data URL comprimida (opcional). */
+	image?: string | null;
 }
 
 interface PrizeManagerProps {
@@ -28,9 +31,9 @@ interface PrizeManagerProps {
 
 /** Rejilla compartida por las filas de premio y la fila de alta. */
 const ROW_BASE =
-	"grid grid-cols-[3rem_minmax(0,1fr)_3.5rem_2.25rem] items-center gap-2";
-const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_2.5rem]`;
-const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_auto]`;
+	"grid grid-cols-[2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem] items-center gap-2";
+const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem]`;
+const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto]`;
 
 export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	templateId,
@@ -42,6 +45,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		name: "",
 		backgroundColor: GREEN_PALETTE[0],
 		probability: 10,
+		image: null,
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const toast = useToast();
@@ -104,6 +108,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			name: "",
 			backgroundColor: nextGreen(prizes.length + 1),
 			probability: 10,
+			image: null,
 		});
 	};
 
@@ -114,7 +119,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const handlePrizeChange = (
 		index: number,
 		field: keyof Prize,
-		value: string | number,
+		value: string | number | null,
 	) => {
 		setPrizes((prev) =>
 			prev.map((prize, i) => {
@@ -125,6 +130,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				}
 				if (field === "backgroundColor") {
 					return { ...prize, backgroundColor: String(value) };
+				}
+				if (field === "image") {
+					return { ...prize, image: value == null ? null : String(value) };
 				}
 				return { ...prize, name: String(value) };
 			}),
@@ -158,7 +166,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				<SectionHeading
 					icon={Pencil}
 					title="Editar premios"
-					subtitle={`Luego de hacer los cambios toca en "Guardar cambios".`}
+					subtitle={`Sube una imagen por premio y luego toca en "Guardar cambios".`}
 				/>
 
 				<div className="mt-4 space-y-4">
@@ -188,8 +196,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 
 					{/* Lista de premios */}
 					<div className="space-y-2">
-						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_4.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
+						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
 							<span>Nombre</span>
+							<span className="text-center">Imagen</span>
 							<span>Color</span>
 							<span>Peso</span>
 							<span className="text-center">Real</span>
@@ -209,7 +218,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 									key={index}
 									className={`${ROW_GRID} py-2 md:py-1.5`}
 								>
-									<div className="col-span-4 md:col-span-1">
+									<div className="col-span-5 md:col-span-1">
 										<BrandInput
 											id={`prize-name-${index}`}
 											type="text"
@@ -221,6 +230,12 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 											aria-label={`Nombre del premio ${index + 1}`}
 										/>
 									</div>
+									<PrizeImageInput
+										value={prize.image}
+										onChange={(image) => handlePrizeChange(index, "image", image)}
+										label={`premio ${index + 1}`}
+										className="justify-self-center md:justify-self-start"
+									/>
 									<BrandColorInput
 										id={`prize-color-${index}`}
 										value={prize.backgroundColor}
@@ -272,7 +287,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 					{/* Agregar nuevo premio */}
 					<div className="rounded-2xl border border-dashed border-[#005f63]/40 bg-[#005f63]/5 p-2.5 md:p-3">
 						<div className={ADD_ROW_GRID}>
-							<div className="col-span-4 md:col-span-1">
+							<div className="col-span-5 md:col-span-1">
 								<BrandInput
 									id="new-prize-name"
 									type="text"
@@ -285,6 +300,12 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 									aria-label="Nombre del nuevo premio"
 								/>
 							</div>
+							<PrizeImageInput
+								value={newPrize.image}
+								onChange={(image) => setNewPrize({ ...newPrize, image })}
+								label="nuevo premio"
+								className="justify-self-center md:justify-self-start"
+							/>
 							<BrandColorInput
 								id="new-prize-color"
 								value={newPrize.backgroundColor}

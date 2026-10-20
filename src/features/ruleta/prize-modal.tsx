@@ -4,12 +4,14 @@ import Confetti from "react-confetti";
 interface PrizeModalProps {
 	prize: string;
 	prizeColor: string | null;
+	prizeImage?: string | null;
 	onClose: () => void;
 }
 
 export const PrizeModal: React.FC<PrizeModalProps> = ({
 	prize,
 	prizeColor,
+	prizeImage,
 	onClose,
 }) => {
 	const btnRef = useRef<HTMLButtonElement>(null);
@@ -54,6 +56,16 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 			/>
 
 			<div className="w-full max-w-2xl text-center animate-fade-in-down mx-auto px-4">
+				{/* Imagen del premio ganador (si la tiene) */}
+				{prizeImage && (
+					<img
+						src={prizeImage}
+						alt={prize}
+						draggable={false}
+						className="mx-auto mb-4 h-auto w-auto max-h-[26vh] max-w-[min(70vw,220px)] object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+					/>
+				)}
+
 				{/* ¡FELICIDADES! - letras enormes sin contenedor, centradas en móvil */ }
 				<h2 className="text-[clamp(30px,9.5vw,72px)] font-black italic text-[#0a454d] leading-tight tracking-tight mb-4 mx-auto w-full text-balance">
 					¡FELICIDADES!

@@ -8,7 +8,7 @@ const { router } = loadModule("../backend/dist/app.js") as { router: Router };
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: "4mb" }));
 
 // Vercel rewrites /api/* to /api/index?__path=* so the function path stays
 // valid. Restore the original path before handing the request to Express.

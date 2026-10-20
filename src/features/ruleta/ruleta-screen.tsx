@@ -192,7 +192,13 @@ interface SpinResponse {
   claimCode: string;
   prizeIndex: number;
   prize: string;
-  prizes: { name: string; backgroundColor: string; probability: number }[];
+  prizeImageUrl?: string | null;
+  prizes: {
+    name: string;
+    backgroundColor: string;
+    probability: number;
+    imageUrl?: string | null;
+  }[];
   rouletteId: number;
 }
 
@@ -205,6 +211,7 @@ export const RouletteViewHook: React.FC = () => {
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [claimCode, setClaimCode] = useState<string | null>(null);
   const [winnerColor, setWinnerColor] = useState<string | null>(null);
+  const [winnerImage, setWinnerImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isModalOpen = finalResult !== null;
 
@@ -226,11 +233,13 @@ export const RouletteViewHook: React.FC = () => {
             name: string;
             backgroundColor?: string;
             probability: number;
+            imageUrl?: string | null;
           }[]
         ).map((p) => ({
           name: p.name,
           bg: p.backgroundColor || "#0a4e58",
           weight: p.probability,
+          image: p.imageUrl ?? null,
         }));
         setRouletteItems(formattedPrizes);
       } catch (error) {
@@ -269,6 +278,7 @@ export const RouletteViewHook: React.FC = () => {
         name: p.name,
         bg: p.backgroundColor,
         weight: p.probability,
+        image: p.imageUrl ?? null,
       }));
       setRouletteItems(formattedPrizes);
 
@@ -276,6 +286,9 @@ export const RouletteViewHook: React.FC = () => {
 
       const winningPrize = spinData.prizes[spinData.prizeIndex];
       setWinnerColor(winningPrize?.backgroundColor ?? null);
+      setWinnerImage(
+        winningPrize?.imageUrl ?? spinData.prizeImageUrl ?? null,
+      );
 
       controlsRef.current?.start(spinData.prizeIndex);
     } catch (err) {
@@ -296,6 +309,11 @@ export const RouletteViewHook: React.FC = () => {
 
   const handlePrizeWon = (prize: string) => {
     setFinalResult(prize);
+    // Respaldo: si el servidor no envió la imagen, se busca en los premios.
+    setWinnerImage(
+      (current) =>
+        current ?? rouletteItems?.find((item) => item.name === prize)?.image ?? null,
+    );
     soundManager.playWin();
   };
 
@@ -750,7 +768,11 @@ export const RouletteViewHook: React.FC = () => {
         <PrizeModal
           prize={finalResult}
           prizeColor={winnerColor}
-          onClose={() => setFinalResult(null)}
+          prizeImage={winnerImage}
+          onClose={() => {
+            setFinalResult(null);
+            setWinnerImage(null);
+          }}
         />
       )}
     </div>

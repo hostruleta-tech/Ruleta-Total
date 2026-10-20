@@ -13,6 +13,7 @@ export interface Pie {
   bg: string;
   name: string;
   color: string;
+  image?: string | null;
 }
 
 export interface RouletteItem {
@@ -20,6 +21,7 @@ export interface RouletteItem {
   bg?: string;
   color?: string;
   weight?: number;
+  image?: string | null;
 }
 
 interface CanvasStyle {
@@ -50,11 +52,22 @@ interface PieStyle {
   theme: PieTheme[];
 }
 
+/** Posición y tamaño de la imagen del premio dentro de su sector. */
+export interface ImageStyle {
+  /** Distancia del centro, como fracción del radio. */
+  offset: number;
+  /** Lado máximo de la imagen, como fracción del radio. */
+  size: number;
+  shadowColor: string;
+  shadowBlur: number;
+}
+
 export interface StyleOptionDefault {
   canvas: CanvasStyle;
   label: LabelStyle;
   arrow: ArrowStyle;
   pie: PieStyle;
+  image: ImageStyle;
 }
 
 export interface StyleOption {
@@ -62,6 +75,7 @@ export interface StyleOption {
   label?: Partial<LabelStyle>;
   arrow?: Partial<ArrowStyle>;
   pie?: Partial<PieStyle>;
+  image?: Partial<ImageStyle>;
 }
 
 export interface RouletteCanvas {

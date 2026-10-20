@@ -9,6 +9,7 @@ import type {
 } from "../types";
 
 import { isDefaultGreen } from "@/shared/prize-colors";
+import { getOrRequestImage } from "./image-cache";
 import {
   calculateLabelPosition,
   calculateSegmentAngle,
@@ -113,17 +114,83 @@ export interface DrawPieLabel {
   segmentStartAngle: number;
   anglePerSegment: number;
   style: StyleOptionDefault;
+  /** Distancia del centro como fracción del radio (0..1). */
+  labelOffset: number;
+  /** Máximo de líneas del nombre (2 cuando hay imágenes). */
+  maxLines: number;
 }
 
 const FONT_SIZE_PATTERN = /\d+(?:\.\d+)?px/;
+
+const withFontSize = (font: string, size: number): string =>
+  font.replace(FONT_SIZE_PATTERN, `${size}px`);
+
+/**
+ * Reparte el texto en líneas que quepan en `maxWidth`. Si sobran palabras,
+ * las acumula en la última línea (luego se recorta con elipsis).
+ */
+const wrapText = (
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] => {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    const candidate = `${current} ${word}`;
+    const isLastAllowedLine = lines.length >= maxLines - 1;
+    if (isLastAllowedLine || context.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+
+  if (current) lines.push(current);
+
+  while (lines.length > maxLines) {
+    const overflow = lines.pop() as string;
+    lines[lines.length - 1] = `${lines[lines.length - 1]} ${overflow}`;
+  }
+
+  return lines;
+};
+
+const truncateText = (
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string => {
+  if (context.measureText(text).width <= maxWidth) return text;
+
+  let truncated = text;
+  while (
+    truncated.length > 1 &&
+    context.measureText(`${truncated}…`).width > maxWidth
+  ) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}…`;
+};
 
 /**
  * Dibuja el nombre del premio pegado a su sector: la palabra gira con la rueda
  * y sigue el arco (orientación tangencial). Así, cuando el sector queda bajo la
  * flecha superior el texto se lee horizontal, y en la parte inferior aparece
  * boca abajo, como en una ruleta física.
- * Si el nombre no cabe en el arco del sector, se reduce el tamaño de fuente
- * (sin deformar el texto) hasta que entre.
+ * Si hay imágenes, el nombre se dibuja más cerca del centro y admite hasta dos
+ * líneas, reduciendo el tamaño de fuente hasta que entre.
  */
 const drawPieLabel = ({
   context,
@@ -132,20 +199,24 @@ const drawPieLabel = ({
   segmentStartAngle,
   anglePerSegment,
   style,
+  labelOffset,
+  maxLines,
 }: DrawPieLabel): void => {
   const { labelX, labelY, labelAngle } = calculateLabelPosition({
     geometry,
     segmentStartAngle,
     anglePerSegment,
-    labelOffset: style.label.offset,
+    labelOffset,
   });
 
   // Ancho disponible: el arco del sector en el radio de la etiqueta. La palabra
   // corre en dirección tangencial, es decir, a lo largo de ese arco.
-  const labelRadius = geometry.radius * style.label.offset;
-  const arcWidth =
-    labelRadius * ((anglePerSegment * Math.PI) / 180) * 0.92;
+  const labelRadius = geometry.radius * labelOffset;
+  const arcWidth = labelRadius * ((anglePerSegment * Math.PI) / 180) * 0.92;
   const maxWidth = Math.max(16, arcWidth);
+
+  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
+  const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
 
   context.save();
   // Matriz fijada desde cero y giro tangencial (+90° sobre el ángulo del
@@ -153,37 +224,108 @@ const drawPieLabel = ({
   context.setTransform(1, 0, 0, 1, labelX, labelY);
   context.rotate(labelAngle + Math.PI / 2);
   context.textAlign = "center";
-  context.textBaseline = style.label.baseline;
+  context.textBaseline = "middle";
   context.fillStyle = pie.color;
-
   context.font = style.label.font;
-  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
+
+  let fontSize = baseSize;
+  let lines = wrapText(context, pie.name, maxWidth, maxLines);
+
+  // Reduce el tamaño hasta que las líneas entren (sin deformar el texto).
   if (fontSizeMatch) {
-    const baseSize = Number.parseFloat(fontSizeMatch[0]);
-    const textWidth = context.measureText(pie.name).width;
-    if (textWidth > maxWidth) {
-      const fittedSize = Math.max(9, Math.floor((maxWidth / textWidth) * baseSize));
-      context.font = style.label.font.replace(
-        FONT_SIZE_PATTERN,
-        `${fittedSize}px`,
-      );
-    }
-  }
-
-  // Si el nombre sigue sin caber (es muy largo), lo recortamos con elipsis.
-  let label = pie.name;
-  if (context.measureText(label).width > maxWidth) {
-    let truncated = label;
     while (
-      truncated.length > 1 &&
-      context.measureText(`${truncated}…`).width > maxWidth
+      fontSize > 9 &&
+      lines.some((line) => context.measureText(line).width > maxWidth)
     ) {
-      truncated = truncated.slice(0, -1);
+      fontSize = Math.max(9, fontSize - 1);
+      context.font = withFontSize(style.label.font, fontSize);
+      lines = wrapText(context, pie.name, maxWidth, maxLines);
     }
-    label = truncated.length < pie.name.length ? `${truncated}…` : truncated;
   }
 
-  context.fillText(label, 0, 0);
+  // Si aun así no cabe (nombre muy largo), se recorta con elipsis.
+  lines = lines.map((line) => truncateText(context, line, maxWidth));
+
+  const lineHeight = fontSize * 1.05;
+  const firstLineOffset = -((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((line, index) => {
+    context.fillText(line, 0, firstLineOffset + index * lineHeight);
+  });
+
+  context.restore();
+};
+
+export interface DrawPieImage {
+  context: CanvasRenderingContext2D;
+  geometry: Geometry;
+  pie: Pie;
+  segmentStartAngle: number;
+  anglePerSegment: number;
+  style: StyleOptionDefault;
+}
+
+/**
+ * Dibuja la imagen del premio dentro de su sector, tangencial a la rueda y
+ * recortada al triángulo para que no invada los sectores vecinos.
+ */
+const drawPieImage = ({
+  context,
+  geometry,
+  pie,
+  segmentStartAngle,
+  anglePerSegment,
+  style,
+}: DrawPieImage): void => {
+  const image = getOrRequestImage(pie.image);
+  if (!image) return;
+
+  const midDeg = degreesToCanvasRadians(
+    segmentStartAngle + anglePerSegment / 2,
+  );
+  const centerX =
+    geometry.center.x + geometry.radius * style.image.offset * Math.cos(midDeg);
+  const centerY =
+    geometry.center.y + geometry.radius * style.image.offset * Math.sin(midDeg);
+
+  const box = geometry.radius * style.image.size;
+  const scale = Math.min(
+    box / image.naturalWidth,
+    box / image.naturalHeight,
+  );
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return;
+  }
+
+  const startDeg = degreesToCanvasRadians(segmentStartAngle);
+  const endDeg = degreesToCanvasRadians(segmentStartAngle + anglePerSegment);
+
+  context.save();
+  context.beginPath();
+  context.moveTo(geometry.center.x, geometry.center.y);
+  context.arc(
+    geometry.center.x,
+    geometry.center.y,
+    geometry.radius * 0.99,
+    startDeg,
+    endDeg,
+    true,
+  );
+  context.closePath();
+  context.clip();
+
+  context.setTransform(1, 0, 0, 1, centerX, centerY);
+  context.rotate(midDeg + Math.PI / 2);
+  context.shadowColor = style.image.shadowColor;
+  context.shadowBlur = style.image.shadowBlur;
+  context.shadowOffsetY = 2;
+  context.drawImage(image, -width / 2, -height / 2, width, height);
   context.restore();
 };
 
@@ -277,15 +419,32 @@ export const drawRoulette = ({
     return {
       name: pie.name,
       bg,
+      image: pie.image ?? null,
       // Los verdes de la paleta por defecto siempre llevan texto blanco;
       // cualquier otro fondo se resuelve con auto-contraste.
       color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
     };
   });
 
+  // Con imágenes, el nombre se acerca al centro (para dejar sitio a la imagen)
+  // y admite dos líneas. Sin imágenes se conserva el diseño original.
+  const hasImages = resolvedPieList.some((pie) => Boolean(pie.image));
+  const labelOffset = hasImages
+    ? Math.min(style.label.offset, 0.58)
+    : style.label.offset;
+  const labelMaxLines = hasImages ? 2 : 1;
+
   for (const pie of resolvedPieList) {
     const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
     drawPie({
+      context,
+      geometry,
+      pie,
+      segmentStartAngle,
+      anglePerSegment,
+      style,
+    });
+    drawPieImage({
       context,
       geometry,
       pie,
@@ -300,6 +459,8 @@ export const drawRoulette = ({
       segmentStartAngle,
       anglePerSegment,
       style,
+      labelOffset,
+      maxLines: labelMaxLines,
     });
     segmentEndAngle = segmentStartAngle;
   }

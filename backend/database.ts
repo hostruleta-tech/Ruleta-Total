@@ -8,6 +8,10 @@ export interface Prize {
 	name: string;
 	backgroundColor: string;
 	probability: number;
+	/** Imagen del premio como data URL (solo se expone completa en el panel). */
+	image?: string | null;
+	/** URL pública y ligera para dibujar la imagen en la ruleta. */
+	imageUrl?: string | null;
 }
 
 export interface RouletteTemplate {
@@ -44,12 +48,18 @@ function mapRoulette(row: Row): RouletteTemplate {
 }
 
 function mapPrize(row: Row): Prize {
+	const id = Number(row.id);
+	const image =
+		row.image == null || String(row.image) === "" ? null : String(row.image);
+
 	return {
-		id: Number(row.id),
+		id,
 		roulette_id: Number(row.roulette_id),
 		name: String(row.name),
 		backgroundColor: String(row.backgroundColor),
 		probability: Number(row.probability),
+		image,
+		imageUrl: image ? `/api/prizes/${id}/image` : null,
 	};
 }
 
@@ -80,6 +90,7 @@ async function ensureInitialized(): Promise<Client> {
               name TEXT NOT NULL,
               backgroundColor TEXT NOT NULL,
               probability REAL NOT NULL,
+              image TEXT,
               FOREIGN KEY (roulette_id) REFERENCES roulettes (id) ON DELETE CASCADE
             )
           `,
@@ -88,6 +99,16 @@ async function ensureInitialized(): Promise<Client> {
 			],
 			"write",
 		);
+
+		// Migración: bases creadas antes de la función de imágenes.
+		const prizeColumns = await client.execute("PRAGMA table_info(prizes)");
+		const hasImageColumn = prizeColumns.rows.some(
+			(column) => column.name === "image",
+		);
+		if (!hasImageColumn) {
+			await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
+			console.log("[db] Columna 'image' agregada a la tabla prizes.");
+		}
 
 		// Auto-seed solo si la base está totalmente vacía.
 		const countResult = await client.execute(
@@ -106,12 +127,13 @@ async function ensureInitialized(): Promise<Client> {
 				if (template.prizes.length > 0) {
 					await client.batch(
 						template.prizes.map((prize) => ({
-							sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability) VALUES (?, ?, ?, ?)",
+							sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
 							args: [
 								rouletteId,
 								prize.name,
 								prize.backgroundColor,
 								prize.probability,
+								null,
 							],
 						})),
 						"write",
@@ -199,8 +221,14 @@ export async function createRoulette(
 	if (prizes.length > 0) {
 		await client.batch(
 			prizes.map((prize) => ({
-				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability) VALUES (?, ?, ?, ?)",
-				args: [rouletteId, prize.name, prize.backgroundColor, prize.probability],
+				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
+				args: [
+					rouletteId,
+					prize.name,
+					prize.backgroundColor,
+					prize.probability,
+					prize.image ?? null,
+				],
 			})),
 			"write",
 		);
@@ -228,8 +256,14 @@ export async function updateRoulette(
 			args: [id],
 		},
 		...prizes.map((prize) => ({
-			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability) VALUES (?, ?, ?, ?)",
-			args: [id, prize.name, prize.backgroundColor, prize.probability],
+			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
+			args: [
+				id,
+				prize.name,
+				prize.backgroundColor,
+				prize.probability,
+				prize.image ?? null,
+			],
 		})),
 	];
 
@@ -286,4 +320,18 @@ export async function setActiveRoulette(id: number): Promise<void> {
 		],
 		"write",
 	);
+}
+
+/** Devuelve la imagen (data URL) de un premio, o null si no tiene. */
+export async function getPrizeImage(id: number): Promise<string | null> {
+	if (!Number.isFinite(id)) return null;
+
+	const client = await getDb();
+	const result = await client.execute({
+		sql: "SELECT image FROM prizes WHERE id = ?",
+		args: [id],
+	});
+
+	const value = result.rows[0]?.image;
+	return value == null || String(value) === "" ? null : String(value);
 }
