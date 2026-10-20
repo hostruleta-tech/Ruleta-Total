@@ -1,28 +1,24 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
 import { AlertCircle, Lock } from "lucide-react";
-import { adminFetch, clearAdminToken, getAdminToken, setAdminToken } from "@/shared/api";
+import { useEffect, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import {
+	API_URL,
+	adminFetch,
+	clearAdminSession,
+	getAdminSession,
+	setAdminSession,
+} from "@/shared/api";
 import { cn } from "@/shared/lib/utils";
+import { AdminAuthContext } from "./admin-auth-context";
 import { PanelShell } from "./panel-shell";
 import { BrandButton, BrandCard, BrandInput, BrandLabel } from "./panel-ui";
-
-interface AdminAuthValue {
-	logout: () => void;
-}
-
-const AdminAuthContext = createContext<AdminAuthValue | null>(null);
-
-export function useAdminAuth(): AdminAuthValue {
-	const context = useContext(AdminAuthContext);
-	if (!context) {
-		throw new Error("useAdminAuth debe usarse dentro de AdminAuthProvider.");
-	}
-	return context;
-}
 
 interface AdminAuthProviderProps {
 	children: ReactNode;
 }
+
+const CONFIG_ERROR =
+	"El servidor no tiene ADMIN_USER, ADMIN_PASSWORD o ADMIN_TOKEN configurados. Revisa las variables de entorno.";
 
 export function AdminAuthProvider({ children }: AdminAuthProviderProps) {
 	const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -33,7 +29,7 @@ export function AdminAuthProvider({ children }: AdminAuthProviderProps) {
 		let mounted = true;
 
 		const checkAuth = async () => {
-			const token = getAdminToken();
+			const token = getAdminSession();
 			if (!token) {
 				if (mounted) {
 					setIsAuthenticated(false);
@@ -46,20 +42,18 @@ export function AdminAuthProvider({ children }: AdminAuthProviderProps) {
 				const res = await adminFetch("/admin/session");
 				if (mounted) {
 					if (res.status === 503) {
-						setError(
-							"El servidor no tiene ADMIN_TOKEN configurado. Revisa las variables de entorno.",
-						);
+						setError(CONFIG_ERROR);
 						setIsAuthenticated(false);
-						clearAdminToken();
+						clearAdminSession();
 					} else {
 						setIsAuthenticated(res.ok);
-						if (!res.ok) clearAdminToken();
+						if (!res.ok) clearAdminSession();
 					}
 				}
 			} catch {
 				if (mounted) {
 					setIsAuthenticated(false);
-					clearAdminToken();
+					clearAdminSession();
 				}
 			} finally {
 				if (mounted) setIsChecking(false);
@@ -77,31 +71,41 @@ export function AdminAuthProvider({ children }: AdminAuthProviderProps) {
 		};
 	}, []);
 
-	const handleLogin = async (token: string) => {
+	const handleLogin = async (username: string, password: string) => {
 		setError(null);
-		// Guardar el token ANTES de validar, porque adminFetch lo lee de sessionStorage.
-		setAdminToken(token);
+
 		try {
-			const res = await adminFetch("/admin/session");
+			const res = await fetch(`${API_URL}/admin/login`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username, password }),
+			});
+
 			if (res.ok) {
+				const data = (await res.json()) as { token?: unknown };
+				if (typeof data.token !== "string" || !data.token) {
+					setError("El servidor devolvió una sesión inválida.");
+					return;
+				}
+				setAdminSession(data.token);
 				setIsAuthenticated(true);
-			} else if (res.status === 503) {
-				clearAdminToken();
-				setError(
-					"El servidor no tiene ADMIN_TOKEN configurado. Revisa las variables de entorno.",
-				);
+				return;
+			}
+
+			if (res.status === 503) {
+				setError(CONFIG_ERROR);
+			} else if (res.status === 401) {
+				setError("Usuario o contraseña incorrectos.");
 			} else {
-				clearAdminToken();
-				setError("Token inválido o sin permisos de administrador.");
+				setError("No se pudo iniciar sesión. Inténtalo de nuevo.");
 			}
 		} catch {
-			clearAdminToken();
 			setError("No se pudo conectar con el servidor.");
 		}
 	};
 
 	const handleLogout = () => {
-		clearAdminToken();
+		clearAdminSession();
 		setIsAuthenticated(false);
 	};
 
@@ -131,18 +135,24 @@ function LoginForm({
 	onLogin,
 	error,
 }: {
-	onLogin: (token: string) => Promise<void>;
+	onLogin: (username: string, password: string) => Promise<void>;
 	error: string | null;
 }) {
-	const [token, setToken] = useState("");
+	const [username, setUsername] = useState("admin");
+	const [password, setPassword] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 
 	const handleSubmit = async (event: FormEvent) => {
 		event.preventDefault();
-		if (!token.trim() || isLoading) return;
+		const normalizedUsername = username.trim();
+		if (!normalizedUsername || !password || isLoading) return;
+
 		setIsLoading(true);
-		await onLogin(token.trim());
-		setIsLoading(false);
+		try {
+			await onLogin(normalizedUsername, password);
+		} finally {
+			setIsLoading(false);
+		}
 	};
 
 	return (
@@ -157,7 +167,7 @@ function LoginForm({
 							Panel de Control
 						</h2>
 						<p className="mt-2 text-sm text-slate-500">
-							Ingresa el token de administrador para acceder
+							Ingresa tus credenciales para acceder
 						</p>
 					</div>
 
@@ -175,29 +185,43 @@ function LoginForm({
 
 					<form onSubmit={handleSubmit} className="space-y-4">
 						<div>
-							<BrandLabel htmlFor="admin-token" className="mb-2">
-								Token de administrador
+							<BrandLabel htmlFor="admin-username" className="mb-2">
+								Usuario
 							</BrandLabel>
 							<BrandInput
-								id="admin-token"
-								type="password"
-								placeholder="Pega tu token aquí"
-								value={token}
-								onChange={(event) => setToken(event.target.value)}
+								id="admin-username"
+								type="text"
+								placeholder="admin"
+								value={username}
+								onChange={(event) => setUsername(event.target.value)}
 								disabled={isLoading}
-								autoComplete="off"
-								className="font-mono text-sm"
+								autoComplete="username"
+								autoCapitalize="none"
+								spellCheck={false}
 							/>
-							<p className="mt-1.5 text-center text-xs text-slate-500">
-								El token se guarda solo en esta pestaña (sessionStorage).
-							</p>
+						</div>
+
+						<div>
+							<BrandLabel htmlFor="admin-password" className="mb-2">
+								Contraseña
+							</BrandLabel>
+							<BrandInput
+								id="admin-password"
+								type="password"
+								placeholder="Tu contraseña"
+								value={password}
+								onChange={(event) => setPassword(event.target.value)}
+								disabled={isLoading}
+								autoComplete="current-password"
+								autoFocus
+							/>
 						</div>
 
 						<BrandButton
 							type="submit"
 							className="w-full"
 							size="lg"
-							disabled={isLoading || !token.trim()}
+							disabled={isLoading || !username.trim() || !password}
 						>
 							{isLoading ? "Accediendo..." : "Acceder al panel"}
 						</BrandButton>

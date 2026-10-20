@@ -3,28 +3,28 @@
 // En producción (Vercel): mismo dominio, reescrito a la función serverless
 export const API_URL = "/api-ruleta";
 
-const ADMIN_TOKEN_KEY = "admin_token";
+const ADMIN_SESSION_KEY = "admin_session";
 
-export function getAdminToken(): string | null {
+export function getAdminSession(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(ADMIN_TOKEN_KEY);
+  return sessionStorage.getItem(ADMIN_SESSION_KEY);
 }
 
-export function setAdminToken(token: string): void {
+export function setAdminSession(token: string): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+  sessionStorage.setItem(ADMIN_SESSION_KEY, token);
 }
 
-export function clearAdminToken(): void {
+export function clearAdminSession(): void {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
 }
 
 export async function adminFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const token = getAdminToken();
+  const token = getAdminSession();
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -35,7 +35,7 @@ export async function adminFetch(
   });
 
   if (res.status === 401) {
-    clearAdminToken();
+    clearAdminSession();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("admin-unauthorized"));
     }

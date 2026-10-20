@@ -1,10 +1,10 @@
 import { ListChecks, LogOut } from "lucide-react";
-import { useAdminAuth } from "./admin-auth";
+import { AdminAuthProvider } from "./admin-auth";
+import { useAdminAuth } from "./admin-auth-context";
 import { PanelShell } from "./panel-shell";
 import { ToastProvider } from "./panel-toast";
 import { BrandButton, BrandCard, SectionHeading } from "./panel-ui";
 import { TemplateManager } from "./template-manager";
-import { AdminAuthProvider } from "./admin-auth";
 
 const AdminPanelContent: React.FC = () => {
 	const { logout } = useAdminAuth();
