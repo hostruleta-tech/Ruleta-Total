@@ -64,19 +64,19 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
             position: "absolute",
             left: 0,
             right: 0,
-            bottom: compact ? "2.5px" : "3px",
+            bottom: compact ? "3.5px" : "4.5px",
             height: compact ? "2.5px" : "3px",
             background: "#ffffff",
           }}
         />
-        {/* Metallic green line - estilo cromado horizontal (en el borde inferior) */}
+        {/* Metallic green line - estilo cromado horizontal (en el borde inferior) - más ancha */}
         <div
           style={{
             position: "absolute",
             left: 0,
             right: 0,
             bottom: 0,
-            height: compact ? "2.5px" : "3px",
+            height: compact ? "3.5px" : "4.5px",
             background:
               "linear-gradient(90deg, #dfe6ea 0%, #7b868f 35%, #c3ccd3 60%, #39424a 100%)",
             filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))",
