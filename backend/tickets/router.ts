@@ -6,12 +6,14 @@ import {
 	TicketNotFoundError,
 	TicketValidationError,
 } from "./errors";
-import { QR_PRINT_WIDTH, renderQrPngDataUrl } from "./qr";
+import { QR_PRINT_WIDTH, QR_PREVIEW_WIDTH, renderQrPngDataUrl } from "./qr";
 import {
 	getBatchById,
 	getTicketById,
+	getTicketSecretById,
 	listBatches,
 	listTickets,
+	mapTicket,
 	validateTicket,
 	reserveTicket,
 	voidTicket,
@@ -26,6 +28,8 @@ import {
 	getBatchQrDataUrls,
 	renderTicketQr,
 } from "./service";
+import { decryptTicketToken } from "./crypto";
+import { buildParticipationUrl } from "./url";
 import {
 	hashTicketToken,
 } from "./token";
@@ -39,6 +43,7 @@ import {
 interface ListQuery {
 	status?: TicketStatus;
 	batchId?: string;
+	date?: string;
 	limit: number;
 	offset: number;
 }
@@ -73,9 +78,16 @@ function parseListQuery(
 			? rawBatchId.trim()
 			: undefined;
 
+	const rawDate = query.date;
+	const date =
+		typeof rawDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+			? rawDate
+			: undefined;
+
 	return {
 		status,
 		batchId,
+		date,
 		limit: intParam(query.limit, 50, 1, 200),
 		offset: intParam(query.offset, 0, 0, 1_000_000),
 	};
@@ -273,6 +285,36 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 		}
 	});
 
+	/** Obtener tickets por IDs (para actualización de estados en vivo).
+	 *  Body: { ids: string[] } (máx 200 IDs)
+	 *  Devuelve: { tickets: TicketDto[] }
+	 */
+	router.post("/", async (req, res) => {
+		try {
+			const body = (req.body ?? {}) as { ids?: unknown };
+			const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string") : [];
+
+			if (ids.length === 0) {
+				return res.json({ tickets: [] });
+			}
+			if (ids.length > 200) {
+				return res.status(400).json({ message: "Máximo 200 tickets por petición." });
+			}
+
+			const client = await getClient();
+			const placeholders = ids.map(() => "?").join(",");
+			const result = await client.execute({
+				sql: `SELECT * FROM tickets WHERE id IN (${placeholders})`,
+				args: ids,
+			});
+
+			const tickets = result.rows.map((row) => withEffectiveStatus(mapTicket(row)));
+			return res.json({ tickets });
+		} catch (error) {
+			return handleError(res, "tickets-by-ids", error);
+		}
+	});
+
 	/** Listado de lotes con contadores por estado. */
 	router.get("/batches", async (req, res) => {
 		try {
@@ -330,6 +372,51 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 			return res.json({ qrDataUrls });
 		} catch (error) {
 			return handleError(res, "batch-qrs", error);
+		}
+	});
+
+	/** QR data URLs para MÚLTIPLES tickets por IDs (panel operador - bajo demanda).
+	 *  Body: { ids: string[] }  (máx 60 IDs por petición)
+	 *  Devuelve: { qrDataUrls: Record<string, string> }
+	 */
+	router.post("/qrs", async (req, res) => {
+		try {
+			const body = (req.body ?? {}) as { ids?: unknown };
+			const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string") : [];
+
+			if (ids.length === 0) {
+				return res.json({ qrDataUrls: {} });
+			}
+			if (ids.length > 60) {
+				return res.status(400).json({ message: "Máximo 60 tickets por petición." });
+			}
+
+			const client = await getClient();
+			const qrDataUrls: Record<string, string> = {};
+
+			// Generar en paralelo con límite de concurrencia (8 a la vez)
+			const concurrency = 8;
+			for (let i = 0; i < ids.length; i += concurrency) {
+				const chunk = ids.slice(i, i + concurrency);
+				await Promise.all(
+					chunk.map(async (id) => {
+						try {
+							const secret = await getTicketSecretById(client, id);
+							if (secret) {
+								const token = decryptTicketToken(secret.tokenEncrypted);
+								const url = buildParticipationUrl(token);
+								qrDataUrls[id] = await renderQrPngDataUrl(url, QR_PREVIEW_WIDTH);
+							}
+						} catch {
+							// Silencioso: si falla uno, devolvemos los que sí funcionaron
+						}
+					})
+				);
+			}
+
+			return res.json({ qrDataUrls });
+		} catch (error) {
+			return handleError(res, "tickets-qrs-batch", error);
 		}
 	});
 

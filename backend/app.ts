@@ -335,6 +335,56 @@ router.get("/tickets/redeemed.csv", requireOperator, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/tickets/dates
+ * Lista de fechas (YYYY-MM-DD) con contadores de tickets, para agrupar por fecha en el panel.
+ * Requiere autenticación de operador.
+ */
+router.get("/tickets/dates", requireOperator, async (req, res) => {
+  try {
+    const client = await getDb();
+    const nowIso = new Date().toISOString().slice(0, 10);
+
+    // Filtrar por estado si se proporciona
+    const statusRaw = req.query.status;
+    const status = typeof statusRaw === "string" && statusRaw.trim() !== "" ? statusRaw.trim() : undefined;
+
+    let where = "WHERE 1=1";
+    const args: (string | number)[] = [];
+
+    if (status) {
+      // Usar estado efectivo para "available" (excluir vencidos)
+      if (status === "available") {
+        where += " AND status = 'available' AND (expires_at IS NULL OR expires_at > ?)";
+        args.push(nowIso);
+      } else {
+        where += " AND status = ?";
+        args.push(status);
+      }
+    }
+
+    const result = await client.execute({
+      sql: `SELECT date(created_at) AS date, COUNT(*) AS count
+            FROM tickets
+            ${where}
+            GROUP BY date(created_at)
+            ORDER BY date(created_at) DESC`,
+      args,
+    });
+
+    const dates = result.rows.map((row) => ({
+      date: String(row.date),
+      count: Number(row.count ?? 0),
+    }));
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ dates });
+  } catch (error) {
+    console.error("[tickets] dates error:", error);
+    return res.status(500).json({ message: "No se pudieron obtener las fechas." });
+  }
+});
+
 // Administración de tickets QR (todas las rutas requieren operador autenticado).
 router.use("/tickets", createTicketsRouter(getDb));
 

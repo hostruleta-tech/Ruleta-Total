@@ -18,6 +18,7 @@ export interface NewTicketRow extends Ticket {
 export interface ListTicketsOptions {
 	status?: TicketStatus;
 	batchId?: string;
+	date?: string; // YYYY-MM-DD
 	limit: number;
 	offset: number;
 	now?: Date;
@@ -197,6 +198,12 @@ export async function listTickets(
 	if (options.batchId) {
 		filters.push("batch_id = ?");
 		args.push(options.batchId);
+	}
+
+	if (options.date) {
+		// Filtrar por fecha de creación (YYYY-MM-DD)
+		filters.push("date(created_at) = ?");
+		args.push(options.date);
 	}
 
 	const where = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
