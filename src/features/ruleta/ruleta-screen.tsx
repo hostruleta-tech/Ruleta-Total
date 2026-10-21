@@ -782,11 +782,12 @@ export const RouletteViewHook: React.FC = () => {
 
         {/* SECCIÓN: ¿CÓMO PARTICIPAR? */}
         <section
-          className="flex items-center"
+          className="flex items-center relative"
           style={{
             backgroundColor: "#022b30",
             padding: "14px 14px 18px 14px",
             color: "#fff",
+            zIndex: 10,
           }}
         >
           <div
