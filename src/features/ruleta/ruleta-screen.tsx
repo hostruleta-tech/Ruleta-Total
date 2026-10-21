@@ -781,13 +781,13 @@ export const RouletteViewHook: React.FC = () => {
             style={{ width: "25%", paddingRight: "6px", borderRight: "1px solid rgba(255, 255, 255, 0.12)" }}
           >
             <h3
-              className="text-[12.6px] font-extrabold leading-snug text-white text-center"
+              className="text-[16px] font-extrabold leading-snug text-white text-center"
               style={{ lineHeight: "1.2" }}
             >
               ¿Cómo<br />participar?
             </h3>
             <div
-              className="w-5 h-[3px] rounded-[2px] mt-1"
+              className="w-6 h-[4px] rounded-[2px] mt-1.5"
               style={{ backgroundColor: "#e31821" }}
             />
           </div>
