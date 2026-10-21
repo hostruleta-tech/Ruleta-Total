@@ -54,24 +54,10 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
         className="absolute inset-0 z-0"
         style={{
           background: "linear-gradient(90deg, #00343b 0%, #00454b 100%)",
-          borderBottom: "2.5px solid transparent",
           clipPath: `polygon(0 0, 100% 0, calc(100% - ${cut}px) 100%, 0 100%)`,
         }}
         aria-hidden="true"
       >
-        {/* Metallic green line - estilo cromado horizontal */}
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: compact ? "9px" : "11px",
-            height: compact ? "2.5px" : "3px",
-            background:
-              "linear-gradient(90deg, #dfe6ea 0%, #7b868f 35%, #c3ccd3 60%, #39424a 100%)",
-            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))",
-          }}
-        />
         {/* White inner line near the bottom edge */}
         <div
           style={{
@@ -81,6 +67,19 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
             bottom: compact ? "6px" : "8px",
             height: compact ? "2.5px" : "3px",
             background: "#ffffff",
+          }}
+        />
+        {/* Metallic green line - estilo cromado horizontal (debajo de la blanca, en el borde) */}
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: compact ? "2.5px" : "3px",
+            background:
+              "linear-gradient(90deg, #dfe6ea 0%, #7b868f 35%, #c3ccd3 60%, #39424a 100%)",
+            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))",
           }}
         />
       </div>

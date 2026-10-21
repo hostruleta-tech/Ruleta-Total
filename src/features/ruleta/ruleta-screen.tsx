@@ -545,13 +545,7 @@ export const RouletteViewHook: React.FC = () => {
           </div>
 
           {/* TÍTULOS - no se encogen */}
-          <section
-            className="relative z-10 shrink-0 w-full text-left mb-[10px]"
-            style={{
-              transform: "rotate(8deg)",
-              transformOrigin: "left center",
-            }}
-          >
+          <section className="relative z-10 shrink-0 w-full text-left mb-[10px]">
             <h1
               className="text-[36.8px] font-black italic leading-none tracking-tight"
               style={{ letterSpacing: "-0.5px" }}
