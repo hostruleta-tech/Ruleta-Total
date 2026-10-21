@@ -217,10 +217,6 @@ export function TicketManager() {
 	const [isLoadingTickets, setIsLoadingTickets] = useState(false);
 	const [busyKey, setBusyKey] = useState<string | null>(null);
 
-	// Ref estable para el callback de refresco (evita reiniciar el polling en cada render)
-	const refreshStatusesRef = useRef(refreshVisibleTicketStatuses);
-	refreshStatusesRef.current = refreshVisibleTicketStatuses;
-
 	// QR loading state per ticket
 	const [qrLoading, setQrLoading] = useState<Set<string>>(new Set());
 	const [qrCache, setQrCache] = useState<Record<string, string>>({});
@@ -287,6 +283,10 @@ export function TicketManager() {
 			// Silencioso
 		}
 	}, [operatorFetch, dateGroups]);
+
+	// Ref estable para el callback de refresco (evita reiniciar el polling en cada render)
+	const refreshStatusesRef = useRef(refreshVisibleTicketStatuses);
+	refreshStatusesRef.current = refreshVisibleTicketStatuses;
 
 	// Usamos el endpoint de stats global para contadores en vivo (más ligero)
 	useLivePolling("/tickets/stats", {
