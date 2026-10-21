@@ -1,6 +1,8 @@
 import {
 	Ban,
 	Bell,
+	ChevronLeft,
+	ChevronRight,
 	Eye,
 	Download,
 	FileArchive,
@@ -10,13 +12,12 @@ import {
 	RotateCcw,
 	Ticket as TicketIcon,
 } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { cn } from "@/shared/lib/utils";
 import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
 import { useLivePolling } from "./use-live-polling";
-import { API_URL } from "@/shared/api";
 import {
 	BrandButton,
 	BrandCard,
@@ -153,7 +154,7 @@ async function responseError(response: Response): Promise<string> {
 
 export function TicketManager() {
 	const toast = useToast();
-	const { operatorFetch, isAuthenticated, logout, checkingAuth } = useOperatorAuth();
+	const { operatorFetch, isAuthenticated, logout } = useOperatorAuth();
 
 	const [quantity, setQuantity] = useState("1");
 	const [label, setLabel] = useState("");
@@ -175,6 +176,14 @@ export function TicketManager() {
 	} | null>(null);
 	const liveRedeemedIdsRef = useRef<Set<string>>(new Set());
 	const viewedBatchIdRef = useRef<string | null>(null);
+
+	// statusByTicket y prizeByTicket (definidos ANTES de usarlos en useMemo)
+	const statusByTicket = new Map(
+		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.status]),
+	);
+	const prizeByTicket = new Map(
+		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.prizeName]),
+	);
 
 	// Paginación y filtro del lote abierto
 	const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">("all");
@@ -224,10 +233,7 @@ export function TicketManager() {
 				const newRedeemed = live.redeemed.filter((r) => !liveRedeemedIdsRef.current.has(r.id));
 				for (const r of newRedeemed) {
 					liveRedeemedIdsRef.current.add(r.id);
-					toast.success(`Canjeado: ${shortId(r.id)} — ${r.prizeName ?? "Premio"}`, {
-						icon: Bell,
-						duration: 5000,
-					});
+					toast.success(`Canjeado: ${shortId(r.id)} — ${r.prizeName ?? "Premio"}`);
 				}
 				// Actualizar estados en tickets y previews: marcar canjeados, NO quitar
 				setResult((current) => {
@@ -489,16 +495,9 @@ export function TicketManager() {
 		}
 	};
 
-	const statusByTicket = new Map(
-		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.status]),
-	);
-	const prizeByTicket = new Map(
-		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.prizeName]),
-	);
-
 	// Usar contadores en vivo si están disponibles
 	const displayCounts = liveCounts
-		? { ...liveCounts, total: result.tickets.length }
+		? { ...liveCounts, total: result?.tickets.length ?? 0 }
 		: countByStatus(result?.tickets ?? []);
 
 	return (

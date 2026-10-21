@@ -24,6 +24,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   showBadge = true,
   compact = false,
   safeArea = false,
+  actions,
 }) => {
   // Diagonal cut values (px from right edge at bottom)
   const cutNormal = 90;
@@ -32,13 +33,6 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   
   // Badge margin: needs to clear the cut area + ribbon
   const badgeMarginRight = compact ? 90 : 125;
-
-  // Ribbon position: centered on the diagonal cut line at ~20% down
-  // Diagonal goes from (right, 0) to (right - cut, 100%)
-  // At 20% down: x offset from right = 0.2 * cut
-  const ribbonOffsetX = compact ? Math.round(0.2 * cutCompact) : Math.round(0.2 * cutNormal); // 12px / 18px
-  const ribbonWidth = compact ? 90 : 100;
-  const ribbonFontSize = compact ? 9 : 10;
   const ribbonPadding = compact ? 4 : 5;
 
   return (

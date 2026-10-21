@@ -451,7 +451,7 @@ export const RouletteViewHook: React.FC = () => {
       setRouletteItems(formattedPrizes);
 
       if (!spinData.demo) {
-        setClaimCode(spinData.claimCode);
+        setClaimCode(spinData.claimCode ?? null);
         setHasSpun(true);
         setLastSpinWasDemo(false);
       } else {
