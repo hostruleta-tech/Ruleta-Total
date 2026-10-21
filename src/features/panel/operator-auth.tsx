@@ -1,7 +1,6 @@
 import {
 	useCallback,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 	type FormEvent,
@@ -9,14 +8,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { LockKeyhole } from "lucide-react";
-import { apiFetch } from "@/shared/api";
-import {
-	OperatorAuthContext,
-	type OperatorAuthValue,
-} from "./operator-auth-context";
+import { API_URL } from "@/shared/api";
+import { OperatorAuthContext, type OperatorAuthValue } from "./operator-auth-context";
 import { BrandButton, BrandInput, BrandLabel } from "./panel-ui";
 
-const STORAGE_KEY = "ruleta:operator-password";
 const PASSWORD_HEADER = "X-Operator-Password";
 
 interface PasswordPrompt {
@@ -24,39 +19,13 @@ interface PasswordPrompt {
 	resolve: (value: string | null) => void;
 }
 
-function readStoredPassword(): string | null {
-	if (typeof window === "undefined") return null;
-	try {
-		return window.sessionStorage.getItem(STORAGE_KEY);
-	} catch {
-		return null;
-	}
-}
-
-function storePassword(password: string): void {
-	try {
-		window.sessionStorage.setItem(STORAGE_KEY, password);
-	} catch {
-		// Si el navegador bloquea sessionStorage, la contraseña sigue en memoria.
-	}
-}
-
-function removeStoredPassword(): void {
-	try {
-		window.sessionStorage.removeItem(STORAGE_KEY);
-	} catch {
-		// Sin acción.
-	}
-}
-
 /**
- * Pide la contraseña de operador cuando una acción protegida la necesita.
- * No hay sesión ni token: la contraseña se envía en cada petición y solo se
- * conserva en memoria y en sessionStorage de esta pestaña.
+ * Provider de autenticación de operador basado en cookie HttpOnly.
+ * La contraseña solo se envía al hacer login; luego la sesión la maneja la cookie.
  */
 export function OperatorAuthProvider({ children }: { children: ReactNode }) {
-	const [password, setPassword] = useState<string | null>(readStoredPassword);
-	const passwordRef = useRef<string | null>(password);
+	const [isAuthenticated, setIsAuthenticated] = useState(false);
+	const [checkingAuth, setCheckingAuth] = useState(true);
 	const promptRef = useRef<PasswordPrompt | null>(null);
 	const [prompt, setPrompt] = useState<PasswordPrompt | null>(null);
 	const [draft, setDraft] = useState("");
@@ -65,10 +34,38 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 		if (prompt) setDraft("");
 	}, [prompt]);
 
-	const clearPassword = useCallback(() => {
-		passwordRef.current = null;
-		setPassword(null);
-		removeStoredPassword();
+	// Verificar autenticación al montar y al volver a la pestaña
+	const checkAuth = useCallback(async () => {
+		try {
+			const res = await fetch(`${API_URL}/auth/me`, {
+				credentials: "same-origin",
+				cache: "no-store",
+			});
+			const data = (await res.json().catch(() => ({}))) as { authenticated?: boolean };
+			setIsAuthenticated(data.authenticated === true);
+		} catch {
+			setIsAuthenticated(false);
+		} finally {
+			setCheckingAuth(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		checkAuth();
+		const handleVisibilityChange = () => {
+			if (!document.hidden) checkAuth();
+		};
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+	}, [checkAuth]);
+
+	// Limpiar contraseña antigua de sessionStorage si existe
+	useEffect(() => {
+		try {
+			window.sessionStorage.removeItem("ruleta:operator-password");
+		} catch {
+			// Ignorar
+		}
 	}, []);
 
 	const finishPrompt = useCallback((value: string | null) => {
@@ -80,7 +77,6 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 
 	const requestPassword = useCallback((message: string) => {
 		return new Promise<string | null>((resolve) => {
-			// Si ya había un diálogo abierto, se cancela para no dejarlo colgado.
 			promptRef.current?.resolve(null);
 			const next: PasswordPrompt = { message, resolve };
 			promptRef.current = next;
@@ -89,44 +85,71 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	const doFetch = useCallback(
-		(path: string, init: RequestInit | undefined, value: string) => {
-			const headers = {
-				...(init?.headers as Record<string, string> | undefined),
-				[PASSWORD_HEADER]: value,
-			};
-			return apiFetch(path, { ...init, headers });
+		(path: string, init: RequestInit | undefined, _value: string) => {
+			// Con cookie, no necesitamos añadir la cabecera; la cookie se envía automáticamente
+			return fetch(`${API_URL}${path}`, {
+				...init,
+				credentials: "same-origin",
+				headers: {
+					"Content-Type": "application/json",
+					...(init?.headers as Record<string, string> | undefined),
+				},
+			});
 		},
 		[],
 	);
 
 	const operatorFetch = useCallback(
 		async (path: string, init?: RequestInit): Promise<Response | null> => {
-			const current = passwordRef.current;
+			// Primer intento con cookie
+			let response = await doFetch(path, init, "");
 
-			if (current) {
-				const response = await doFetch(path, init, current);
-				if (response.status !== 401) return response;
-				clearPassword();
+			// Si 401, la cookie expiró o no es válida -> pedir contraseña
+			if (response.status === 401) {
+				const entered = await requestPassword(
+					"La sesión expiró. Introduce la contraseña de operador para continuar.",
+				);
+				if (!entered) return null;
+
+				// Login con la contraseña para renovar la cookie
+				const loginRes = await fetch(`${API_URL}/auth/login`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					credentials: "same-origin",
+					body: JSON.stringify({ password: entered }),
+				});
+
+				if (!loginRes.ok) {
+					setIsAuthenticated(false);
+					throw new Error("Contraseña de operador incorrecta.");
+				}
+
+				setIsAuthenticated(true);
+				// Reintentar la petición original con la nueva cookie
+				response = await doFetch(path, init, "");
 			}
 
-			const entered = await requestPassword(
-				"Introduce la contraseña de operador para continuar.",
-			);
-			if (!entered) return null;
-
-			passwordRef.current = entered;
-			setPassword(entered);
-			storePassword(entered);
-
-			const response = await doFetch(path, init, entered);
 			if (response.status === 401) {
-				clearPassword();
+				setIsAuthenticated(false);
 				throw new Error("Contraseña de operador incorrecta.");
 			}
+
 			return response;
 		},
-		[clearPassword, doFetch, requestPassword],
+		[doFetch, requestPassword],
 	);
+
+	const logout = useCallback(async () => {
+		try {
+			await fetch(`${API_URL}/auth/logout`, {
+				method: "POST",
+				credentials: "same-origin",
+			});
+		} catch {
+			// Ignorar errores
+		}
+		setIsAuthenticated(false);
+	}, []);
 
 	const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -137,11 +160,12 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 
 	const value = useMemo<OperatorAuthValue>(
 		() => ({
-			hasPassword: password !== null,
+			isAuthenticated,
 			operatorFetch,
-			clearPassword,
+			logout,
+			checkingAuth,
 		}),
-		[clearPassword, operatorFetch, password],
+		[isAuthenticated, operatorFetch, logout, checkingAuth],
 	);
 
 	return (
@@ -202,7 +226,7 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 							</div>
 
 							<p className="mt-2 text-[11px] font-medium text-slate-400">
-								Se guarda solo en esta pestaña.
+								La sesión se mantiene con cookie segura (8 h).
 							</p>
 
 							<div className="mt-5 flex justify-end gap-2">
@@ -229,3 +253,6 @@ export function OperatorAuthProvider({ children }: { children: ReactNode }) {
 		</OperatorAuthContext.Provider>
 	);
 }
+
+// Necesario para el useMemo
+import { useMemo } from "react";

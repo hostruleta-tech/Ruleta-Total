@@ -70,6 +70,21 @@ const MIGRATIONS: readonly Migration[] = [
 			"CREATE INDEX IF NOT EXISTS idx_tickets_reserved_until ON tickets (reserved_until)",
 		],
 	},
+	{
+		id: "004_auth_rate_limit",
+		statements: [
+			`
+        CREATE TABLE IF NOT EXISTS auth_attempts (
+          ip_hash TEXT PRIMARY KEY,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          reset_at TEXT NOT NULL
+        )
+      `,
+			"CREATE INDEX IF NOT EXISTS idx_auth_attempts_reset ON auth_attempts (reset_at)",
+			"CREATE INDEX IF NOT EXISTS idx_tickets_batch_status ON tickets (batch_id, status)",
+			"CREATE INDEX IF NOT EXISTS idx_tickets_status_redeemed ON tickets (status, redeemed_at)",
+		],
+	},
 ];
 
 /**

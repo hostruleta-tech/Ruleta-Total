@@ -4,7 +4,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Maximize, Minimize } from "lucide-react";
+import { Maximize, Minimize, LayoutDashboard, Bell } from "lucide-react";
 import { useRoulette } from "@/features/motor/hooks/use-roulette";
 import type { RouletteItem } from "@/features/motor/types";
 import { Roulette } from "@/features/motor/components/roulette";
@@ -189,8 +189,8 @@ const RouletteGame: React.FC<{
 };
 
 interface SpinResponse {
-  claimCode: string;
-  ticketId: string;
+  claimCode?: string;
+  ticketId?: string;
   prizeIndex: number;
   prize: string;
   prizeImageUrl?: string | null;
@@ -201,6 +201,7 @@ interface SpinResponse {
     imageUrl?: string | null;
   }[];
   rouletteId: number;
+  demo?: boolean;
 }
 
 /** Estado del ticket leído desde el fragmento de la URL. */
@@ -208,7 +209,8 @@ type TicketState =
   | { kind: "checking" }
   | { kind: "missing" }
   | { kind: "valid"; ticketId: string }
-  | { kind: "invalid"; message: string };
+  | { kind: "invalid"; message: string }
+  | { kind: "admin" };
 
 /** El token viaja en `#t=<token>`; nunca se envía en la URL al servidor. */
 function readTokenFromHash(): string | null {
@@ -255,14 +257,35 @@ export const RouletteViewHook: React.FC = () => {
     kind: "checking",
   });
   const [hasSpun, setHasSpun] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const isModalOpen = finalResult !== null;
 
   // Lee el token del fragmento, lo borra de la barra de direcciones y lo
   // valida contra el servidor sin consumir el ticket.
   useEffect(() => {
     const token = readTokenFromHash();
+
+    // Verificar sesión de admin en paralelo
+    const checkAdmin = async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/me`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as { authenticated?: boolean };
+        setIsAdmin(data.authenticated === true);
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+    checkAdmin();
+
     if (!token) {
-      setTicketState({ kind: "missing" });
+      if (isAdmin) {
+        setTicketState({ kind: "admin" });
+      } else {
+        setTicketState({ kind: "missing" });
+      }
       return;
     }
 
@@ -314,6 +337,20 @@ export const RouletteViewHook: React.FC = () => {
     };
   }, []);
 
+  // Re-verificar sesión de admin al volver a la pestaña
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetch(`${API_URL}/auth/me`, { credentials: "same-origin", cache: "no-store" })
+          .then((res) => res.json().catch(() => ({})))
+          .then((data: { authenticated?: boolean }) => setIsAdmin(data.authenticated === true))
+          .catch(() => setIsAdmin(false));
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   const controlsRef = useRef<RouletteControls | null>(null);
   const handleControlsReady = useCallback((controls: RouletteControls) => {
     controlsRef.current = controls;
@@ -352,16 +389,24 @@ export const RouletteViewHook: React.FC = () => {
   }, [isModalOpen]);
 
   const handleSpin = async () => {
-    if (isSpinning || isModalOpen || !rouletteItems || hasSpun) return;
+    if (isSpinning || isModalOpen || !rouletteItems) return;
 
-    if (ticketState.kind !== "valid" || !ticketToken) {
+    // Modo admin: puede girar sin ticket y sin límite de hasSpun
+    const isAdminMode = ticketState.kind === "admin";
+
+    if (!isAdminMode && (ticketState.kind !== "valid" || !ticketToken)) {
       setError(
         ticketState.kind === "missing"
           ? "Escanea el QR de tu ticket para poder girar."
           : ticketState.kind === "invalid"
-            ? ticketState.message
-            : "Validando tu ticket, espera un momento.",
+          ? ticketState.message
+          : "Validando tu ticket, espera un momento.",
       );
+      return;
+    }
+
+    if (!isAdminMode && hasSpun) {
+      setError("Este ticket ya fue canjeado.");
       return;
     }
 
@@ -370,10 +415,12 @@ export const RouletteViewHook: React.FC = () => {
     soundManager.playSpinStart();
 
     try {
+      const body = isAdminMode ? {} : { token: ticketToken };
       const response = await fetch(`${API_URL}/spin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: ticketToken }),
+        credentials: "same-origin",
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -403,8 +450,10 @@ export const RouletteViewHook: React.FC = () => {
       }));
       setRouletteItems(formattedPrizes);
 
-      setClaimCode(spinData.claimCode);
-      setHasSpun(true);
+      if (!spinData.demo) {
+        setClaimCode(spinData.claimCode);
+        setHasSpun(true);
+      }
 
       const winningPrize = spinData.prizes[spinData.prizeIndex];
       setWinnerColor(winningPrize?.backgroundColor ?? null);
@@ -439,7 +488,7 @@ export const RouletteViewHook: React.FC = () => {
     soundManager.playWin();
   };
 
-  const canSpin = ticketState.kind === "valid" && !hasSpun;
+  const canSpin = (ticketState.kind === "valid" && !hasSpun) || ticketState.kind === "admin";
 
   return (
     <div
@@ -450,9 +499,7 @@ export const RouletteViewHook: React.FC = () => {
     >
       {/* MARCO SIMULADOR MÓVIL */}
       <div
-        className={`w-full min-h-dvh relative overflow-hidden flex flex-col ${
-          isFullscreen ? "max-w-none" : "max-w-none sm:max-w-[440px]"
-        }`}
+        className={`w-full min-h-dvh relative overflow-hidden flex flex-col ${isFullscreen ? "max-w-none" : "max-w-none sm:max-w-[440px]"}`}
         style={{
           background:
             "linear-gradient(175deg, #f0f4f5 0%, #e6edef 45%, #d9e4e7 100%)",
@@ -561,24 +608,20 @@ export const RouletteViewHook: React.FC = () => {
               }}
               onMouseDown={(e) => {
                 if (!isSpinning) {
-                  (e.currentTarget as HTMLButtonElement).style.transform =
-                    "scale(0.97)";
-                  (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                    "0 4px 10px rgba(227, 24, 33, 0.35)";
+                  (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 10px rgba(227, 24, 33, 0.35)";
                 }
               }}
               onMouseUp={(e) => {
                 if (!isSpinning) {
-                  (e.currentTarget as HTMLButtonElement).style.transform =
-                    "scale(1)";
+                  (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
                   (e.currentTarget as HTMLButtonElement).style.boxShadow =
                     "0 8px 18px rgba(227, 24, 33, 0.42), inset 0 1px 1px rgba(255, 255, 255, 0.45)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isSpinning) {
-                  (e.currentTarget as HTMLButtonElement).style.transform =
-                    "scale(1)";
+                  (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
                   (e.currentTarget as HTMLButtonElement).style.boxShadow =
                     "0 8px 18px rgba(227, 24, 33, 0.42), inset 0 1px 1px rgba(255, 255, 255, 0.45)";
                 }
@@ -598,9 +641,11 @@ export const RouletteViewHook: React.FC = () => {
               <span>
                 {isSpinning
                   ? "GIRANDO..."
+                  : ticketState.kind === "admin"
+                  ? "GIRAR (DEMO)"
                   : hasSpun
-                    ? "TICKET CANJEADO"
-                    : "GIRAR RULETA"}
+                  ? "TICKET CANJEADO"
+                  : "GIRAR RULETA"}
               </span>
             </button>
 
@@ -657,8 +702,10 @@ export const RouletteViewHook: React.FC = () => {
                   {finalResult
                     ? finalResult
                     : ticketState.kind === "valid"
-                      ? "Ticket válido"
-                      : "Escanea tu ticket"}
+                    ? "Ticket válido"
+                    : ticketState.kind === "admin"
+                    ? "Modo administrador"
+                    : "Escanea tu ticket"}
                 </h4>
                 <p
                   className="text-[11px] font-semibold mt-0.5"
@@ -667,15 +714,51 @@ export const RouletteViewHook: React.FC = () => {
                   {finalResult
                     ? `¡Felicidades! Código: ${claimCode}`
                     : ticketState.kind === "valid"
-                      ? "Pulsa GIRAR RULETA para participar."
-                      : ticketState.kind === "checking"
-                        ? "Validando ticket..."
-                        : ticketState.kind === "missing"
-                          ? "Necesitas el QR de tu ticket para girar."
-                          : ticketState.message}
+                    ? "Pulsa GIRAR RULETA para participar."
+                    : ticketState.kind === "checking"
+                    ? "Validando ticket..."
+                    : ticketState.kind === "missing"
+                    ? "Necesitas el QR de tu ticket para girar."
+                    : ticketState.kind === "admin"
+                    ? "Pulsa GIRAR (DEMO) para probar la ruleta sin consumir ticket."
+                    : ticketState.message}
                 </p>
               </div>
             </section>
+
+            {/* Badge modo administrador */}
+            {ticketState.kind === "admin" && (
+              <div className="flex items-center gap-2 text-xs font-medium text-[#005f63]">
+                <Bell className="h-3.5 w-3.5" />
+                <span>Modo administrador — giros ilimitados sin consumir tickets</span>
+                <a
+                  href="/?view=menu"
+                  className="underline hover:text-[#e51a24] ml-2"
+                >
+                  Volver al menú
+                </a>
+              </div>
+            )}
+
+            {/* Botón "Girar sin ticket" si hay token inválido pero hay sesión admin */}
+            {ticketState.kind === "invalid" && isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `${window.location.pathname}${window.location.search}`,
+                  );
+                  setTicketState({ kind: "admin" });
+                  setError(null);
+                }}
+                className="w-[90%] max-w-[340px] flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-[#005f63] bg-white/80 border border-[#005f63]/30 hover:bg-white transition"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Girar sin ticket (demo)
+              </button>
+            )}
           </div>
         </main>
 

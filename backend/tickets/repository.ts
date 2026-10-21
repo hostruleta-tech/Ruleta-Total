@@ -29,7 +29,7 @@ export interface ListBatchesOptions {
 	now?: Date;
 }
 
-function mapTicket(row: Row): Ticket {
+export function mapTicket(row: Row): Ticket {
 	return {
 		id: String(row.id),
 		batchId: row.batch_id == null ? null : String(row.batch_id),
@@ -249,13 +249,25 @@ export async function listBatchTicketSecrets(
 	client: Client,
 	batchId: string,
 	limit?: number,
+	onlyActive?: boolean,
 ): Promise<TicketSecretRow[]> {
-	const result = await client.execute({
-		sql: `SELECT * FROM tickets WHERE batch_id = ?
-          ORDER BY created_at ASC, id ASC
-          ${limit ? "LIMIT ?" : ""}`,
-		args: limit ? [batchId, limit] : [batchId],
-	});
+	const nowIso = new Date().toISOString();
+	let sql = `SELECT * FROM tickets WHERE batch_id = ?`;
+	const args: (string | number)[] = [batchId];
+
+	if (onlyActive) {
+		sql += ` AND (status = 'available' AND (expires_at IS NULL OR expires_at > ?)
+			OR status = 'reserved' AND reserved_until > ?)`;
+		args.push(nowIso, nowIso);
+	}
+
+	sql += ` ORDER BY created_at ASC, id ASC`;
+	if (limit) {
+		sql += ` LIMIT ?`;
+		args.push(limit);
+	}
+
+	const result = await client.execute({ sql, args });
 	return result.rows.map((row) => ({
 		ticket: mapTicket(row),
 		tokenEncrypted: String(row.token_encrypted),
@@ -280,7 +292,9 @@ export async function listBatches(
               AND t.status = 'available'
               AND (t.expires_at IS NULL OR t.expires_at > ?)) AS available,
           (SELECT COUNT(*) FROM tickets t
-            WHERE t.batch_id = b.id AND t.status = 'reserved') AS reserved,
+            WHERE t.batch_id = b.id
+              AND t.status = 'reserved'
+              AND t.reserved_until > ?) AS reserved,
           (SELECT COUNT(*) FROM tickets t
             WHERE t.batch_id = b.id AND t.status = 'redeemed') AS redeemed,
           (SELECT COUNT(*) FROM tickets t
@@ -294,7 +308,7 @@ export async function listBatches(
         FROM ticket_batches b
         ORDER BY b.created_at DESC, b.id DESC
         LIMIT ? OFFSET ?`,
-		args: [nowIso, nowIso, options.limit, options.offset],
+		args: [nowIso, nowIso, nowIso, options.limit, options.offset],
 	});
 
 	return {

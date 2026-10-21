@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Client } from "@libsql/client";
-import { requireOperatorPassword } from "./auth";
+import { requireOperator } from "../auth/session";
 import {
 	TicketConfigError,
 	TicketNotFoundError,
@@ -8,6 +8,7 @@ import {
 } from "./errors";
 import { QR_PRINT_WIDTH, renderQrPngDataUrl } from "./qr";
 import {
+	getBatchById,
 	getTicketById,
 	listBatches,
 	listTickets,
@@ -30,6 +31,7 @@ import {
 import {
 	isTicketStatus,
 	withEffectiveStatus,
+	effectiveStatus,
 	type TicketStatus,
 } from "./types";
 
@@ -187,8 +189,8 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 		}
 	});
 
-	// ==================== RUTAS DE OPERADOR (requieren contraseña) ====================
-	router.use(requireOperatorPassword);
+	// ==================== RUTAS DE OPERADOR (requieren operador autenticado) ====================
+	router.use(requireOperator);
 
 	/** Crea un único ticket. */
 	router.post("/", async (req, res) => {
@@ -293,7 +295,8 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 	router.get("/batches/:id/qr.zip", async (req, res) => {
 		try {
 			const client = await getClient();
-			const result = await buildBatchQrZip(client, req.params.id);
+			const includeAll = req.query.include === "all";
+			const result = await buildBatchQrZip(client, req.params.id, includeAll);
 
 			res.setHeader("Content-Type", "application/zip");
 			res.setHeader(
@@ -307,21 +310,29 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 		}
 	});
 
-	/** Detalle del lote con las primeras vistas previas. */
+	/** Detalle del lote con las primeras vistas previas (solo activos). */
 	router.get("/batches/:id", async (req, res) => {
 		try {
 			const client = await getClient();
-			const result = await getBatchDetail(client, req.params.id);
+			const result = await getBatchDetail(client, req.params.id, { onlyActivePreviews: true });
 			return res.json(result);
 		} catch (error) {
 			return handleError(res, "batch-detail", error);
 		}
 	});
 
-	/** PNG individual para descarga o reimpresión. */
+	/** PNG individual para descarga o reimpresión. No disponible para canjeados/anulados. */
 	router.get("/:id/qr", async (req, res) => {
 		try {
 			const client = await getClient();
+			const ticket = await getTicketById(client, req.params.id);
+			if (!ticket) {
+				return res.status(404).json({ message: "El ticket no existe." });
+			}
+			const effective = effectiveStatus(ticket);
+			if (effective === "redeemed" || effective === "void") {
+				return res.status(410).json({ message: "Ticket ya canjeado." });
+			}
 			const png = await renderTicketQr(client, req.params.id);
 
 			res.setHeader("Content-Type", "image/png");

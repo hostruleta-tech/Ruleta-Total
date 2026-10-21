@@ -8,6 +8,7 @@
     }
   },
   "rewrites": [
+    { "source": "/login-admin", "destination": "/index.html" },
     { "source": "/api/:path*", "destination": "/api/index?__path=:path*" },
     { "source": "/api-ruleta/:path*", "destination": "/api/index?__path=:path*" }
   ]

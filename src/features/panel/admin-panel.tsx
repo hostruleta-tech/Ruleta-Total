@@ -1,4 +1,4 @@
-import { LayoutTemplate, QrCode } from "lucide-react";
+import { LayoutTemplate, QrCode, Download } from "lucide-react";
 import { useState } from "react";
 import { OperatorAuthProvider } from "./operator-auth";
 import { BrandButton } from "./panel-ui";
@@ -6,9 +6,10 @@ import { PanelShell } from "./panel-shell";
 import { TicketManager } from "./ticket-manager";
 import { ToastProvider } from "./panel-toast";
 import { TemplateManager } from "./template-manager";
+import { RedeemedManager } from "./redeemed-manager";
 
 const AdminPanelContent: React.FC = () => {
-	const [section, setSection] = useState<"prizes" | "tickets">("prizes");
+	const [section, setSection] = useState<"prizes" | "tickets" | "redeemed">("prizes");
 
 	return (
 		<PanelShell badge="Panel del Operador">
@@ -57,10 +58,20 @@ const AdminPanelContent: React.FC = () => {
 						<QrCode className="h-4 w-4" />
 						Tickets QR
 					</BrandButton>
+					<BrandButton
+						role="tab"
+						aria-selected={section === "redeemed"}
+						variant={section === "redeemed" ? "primary" : "light"}
+						size="sm"
+						onClick={() => setSection("redeemed")}
+					>
+						<Download className="h-4 w-4" />
+						QR Canjeados
+					</BrandButton>
 				</div>
 
 				{/* Contenido de la sección activa */}
-				{section === "prizes" ? <TemplateManager /> : <TicketManager />}
+				{section === "prizes" ? <TemplateManager /> : section === "tickets" ? <TicketManager /> : <RedeemedManager />}
 			</div>
 		</PanelShell>
 	);

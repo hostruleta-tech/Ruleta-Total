@@ -11,16 +11,21 @@ import {
   type Prize,
   updateRoulette,
 } from "./database";
-import { requireOperatorPassword } from "./tickets/auth";
+import { requireOperator } from "./auth/session";
+import { createAuthRouter } from "./auth/router";
 import { createTicketsRouter } from "./tickets/router";
 import { hashTicketToken } from "./tickets/token";
 import {
+  getBatchById,
   reserveTicket,
   redeemTicket,
   validateTicket,
+  listBatches,
+  listBatchTickets,
   type PrizeInfo,
 } from "./tickets/repository";
-import { withEffectiveStatus } from "./tickets/types";
+import { withEffectiveStatus, effectiveStatus } from "./tickets/types";
+import { buildBatchQrZip, getBatchDetail } from "./tickets/service";
 
 const router = Router();
 
@@ -107,7 +112,10 @@ function toPublicPrize(prize: Prize) {
 // In production Vercel handles it
 router.use(express.json({ limit: "4mb" }));
 
-// Administración de tickets QR (todas las rutas requieren contraseña).
+// Auth routes (login, logout, me) - públicas
+router.use("/auth", createAuthRouter(getDb));
+
+// Administración de tickets QR (todas las rutas requieren operador autenticado).
 router.use("/tickets", createTicketsRouter(getDb));
 
 // Utilidad: sorteo ponderado por probabilidad
@@ -138,14 +146,13 @@ function pickWeightedIndex(prizes: Prize[]): number {
  * el servidor sortea con la plantilla activa, canjea el ticket y
  * devuelve el premio junto con el ID del ticket como código de reclamación.
  * Body: { token: string }
+ *
+ * Modo demo (admin): sin token + sesión de operador válida -> gira sin consumir ticket.
  */
 router.post("/spin", async (req, res) => {
   try {
     const body = (req.body ?? {}) as { token?: unknown };
     const token = typeof body.token === "string" ? body.token.trim() : "";
-    if (!token) {
-      return res.status(400).json({ message: "Token de ticket requerido." });
-    }
 
     const active = await getActiveRouletteWithPrizes();
     if (!active || !active.prizes || active.prizes.length === 0) {
@@ -154,6 +161,32 @@ router.post("/spin", async (req, res) => {
         .json({ message: "No hay plantilla activa con premios." });
     }
 
+    // MODO DEMO: sin token pero con sesión de operador
+    if (!token) {
+      // Verificar si hay sesión de operador (cookie o cabecera)
+      const hasOperatorSession =
+        req.get("x-operator-password") !== undefined ||
+        (await import("./auth/session")).verifySession(req);
+
+      if (!hasOperatorSession) {
+        return res.status(400).json({ message: "Token de ticket requerido." });
+      }
+
+      // Giro demo: sortear sin tocar la base de datos
+      const winnerIndex = pickWeightedIndex(active.prizes);
+      const prize = active.prizes[winnerIndex];
+
+      return res.json({
+        demo: true,
+        prizeIndex: winnerIndex,
+        prize: prize.name,
+        prizeImageUrl: prize.imageUrl ?? null,
+        prizes: active.prizes.map(toPublicPrize),
+        rouletteId: active.id,
+      });
+    }
+
+    // FLUJO NORMAL CON TICKET
     const tokenHash = hashTicketToken(token);
     const client = await getDb();
 
@@ -243,6 +276,225 @@ router.get("/configuracion", async (req, res) => {
 });
 
 /**
+ * GET /api/tickets/batches/:id/live
+ * Endpoint ligero para polling del panel en tiempo real.
+ * No genera imágenes QR, solo contadores y últimos canjeados.
+ * Requiere autenticación de operador.
+ */
+router.get("/tickets/batches/:id/live", requireOperator, async (req, res) => {
+  try {
+    const client = await getDb();
+    const batchId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    // Verificar que el lote existe
+    const batch = await getBatchById(client, batchId);
+    if (!batch) {
+      return res.status(404).json({ message: "El lote no existe." });
+    }
+
+    // Contadores con estado efectivo
+    const countsResult = await client.execute({
+      sql: `SELECT
+          SUM(CASE WHEN status = 'available' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS available,
+          SUM(CASE WHEN status = 'reserved' AND reserved_until > ? THEN 1 ELSE 0 END) AS reserved,
+          SUM(CASE WHEN status = 'redeemed' THEN 1 ELSE 0 END) AS redeemed,
+          SUM(CASE WHEN status = 'void' THEN 1 ELSE 0 END) AS void,
+          SUM(CASE WHEN status = 'expired' OR (status = 'available' AND expires_at IS NOT NULL AND expires_at <= ?) THEN 1 ELSE 0 END) AS expired,
+          COUNT(*) AS total
+        FROM tickets WHERE batch_id = ?`,
+      args: [nowIso, nowIso, nowIso, batchId],
+    });
+
+    const counts = countsResult.rows[0] as Record<string, number | null>;
+
+    // Últimos 20 canjeados del lote
+    const redeemedResult = await client.execute({
+      sql: `SELECT id, prize_name, redeemed_at
+            FROM tickets
+            WHERE batch_id = ? AND status = 'redeemed'
+            ORDER BY redeemed_at DESC
+            LIMIT 20`,
+      args: [batchId],
+    });
+
+    const redeemed = redeemedResult.rows.map((row) => ({
+      id: String(row.id),
+      prizeName: row.prize_name == null ? null : String(row.prize_name),
+      redeemedAt: String(row.redeemed_at),
+    }));
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      batchId,
+      counts: {
+        total: Number(counts.total ?? 0),
+        available: Number(counts.available ?? 0),
+        reserved: Number(counts.reserved ?? 0),
+        redeemed: Number(counts.redeemed ?? 0),
+        void: Number(counts.void ?? 0),
+        expired: Number(counts.expired ?? 0),
+      },
+      redeemed,
+      serverTime: now.toISOString(),
+    });
+  } catch (error) {
+    console.error("[tickets] live error:", error);
+    return res.status(500).json({ message: "No se pudo obtener el estado en vivo." });
+  }
+});
+
+/**
+ * GET /api/tickets/redeemed
+ * Registro global de tickets canjeados con paginación y filtros.
+ * Requiere autenticación de operador.
+ */
+router.get("/tickets/redeemed", requireOperator, async (req, res) => {
+  try {
+    const client = await getDb();
+    const batchIdRaw = req.query.batchId;
+    const batchId = typeof batchIdRaw === "string" && batchIdRaw.trim() ? batchIdRaw.trim() : undefined;
+    const qRaw = req.query.q;
+    const q = typeof qRaw === "string" ? qRaw.trim().toUpperCase() : undefined;
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
+    const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+    let where = "WHERE t.status = 'redeemed'";
+    const args: (string | number)[] = [];
+
+    if (batchId) {
+      where += " AND t.batch_id = ?";
+      args.push(batchId);
+    }
+    if (q) {
+      where += " AND UPPER(t.id) LIKE ?";
+      args.push(`${q}%`);
+    }
+
+    const countResult = await client.execute({
+      sql: `SELECT COUNT(*) AS total FROM tickets t ${where}`,
+      args,
+    });
+
+    const result = await client.execute({
+      sql: `SELECT t.id, t.batch_id, b.label AS batch_label, t.prize_name, t.redeemed_at
+            FROM tickets t
+            LEFT JOIN ticket_batches b ON t.batch_id = b.id
+            ${where}
+            ORDER BY t.redeemed_at DESC, t.id DESC
+            LIMIT ? OFFSET ?`,
+      args: [...args, limit, offset],
+    });
+
+    const tickets = result.rows.map((row) => ({
+      id: String(row.id),
+      batchId: row.batch_id == null ? null : String(row.batch_id),
+      batchLabel: row.batch_label == null ? null : String(row.batch_label),
+      prizeName: row.prize_name == null ? null : String(row.prize_name),
+      redeemedAt: String(row.redeemed_at),
+    }));
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      total: Number(countResult.rows[0]?.total ?? 0),
+      limit,
+      offset,
+      tickets,
+    });
+  } catch (error) {
+    console.error("[tickets] redeemed error:", error);
+    return res.status(500).json({ message: "No se pudo obtener el registro de canjeados." });
+  }
+});
+
+/**
+ * GET /api/tickets/stats
+ * Totales globales con estado efectivo.
+ * Requiere autenticación de operador.
+ */
+router.get("/tickets/stats", requireOperator, async (req, res) => {
+  try {
+    const client = await getDb();
+    const nowIso = new Date().toISOString();
+
+    const result = await client.execute({
+      sql: `SELECT
+          SUM(CASE WHEN status = 'available' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS available,
+          SUM(CASE WHEN status = 'reserved' AND reserved_until > ? THEN 1 ELSE 0 END) AS reserved,
+          SUM(CASE WHEN status = 'redeemed' THEN 1 ELSE 0 END) AS redeemed,
+          SUM(CASE WHEN status = 'void' THEN 1 ELSE 0 END) AS void,
+          SUM(CASE WHEN status = 'expired' OR (status = 'available' AND expires_at IS NOT NULL AND expires_at <= ?) THEN 1 ELSE 0 END) AS expired,
+          COUNT(*) AS total
+        FROM tickets`,
+      args: [nowIso, nowIso, nowIso],
+    });
+
+    const row = result.rows[0] as Record<string, number | null>;
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      total: Number(row.total ?? 0),
+      available: Number(row.available ?? 0),
+      reserved: Number(row.reserved ?? 0),
+      redeemed: Number(row.redeemed ?? 0),
+      void: Number(row.void ?? 0),
+      expired: Number(row.expired ?? 0),
+    });
+  } catch (error) {
+    console.error("[tickets] stats error:", error);
+    return res.status(500).json({ message: "No se pudieron obtener las estadísticas." });
+  }
+});
+
+/**
+ * GET /api/tickets/redeemed.csv
+ * Exportación CSV de canjeados (sin paginación).
+ * Requiere autenticación de operador.
+ */
+router.get("/tickets/redeemed.csv", requireOperator, async (req, res) => {
+  try {
+    const client = await getDb();
+    const batchIdRaw = req.query.batchId;
+    const batchId = typeof batchIdRaw === "string" && batchIdRaw.trim() ? batchIdRaw.trim() : undefined;
+
+    let where = "WHERE t.status = 'redeemed'";
+    const args: string[] = [];
+
+    if (batchId) {
+      where += " AND t.batch_id = ?";
+      args.push(batchId);
+    }
+
+    const result = await client.execute({
+      sql: `SELECT t.id, t.batch_id, b.label AS batch_label, t.prize_name, t.redeemed_at
+            FROM tickets t
+            LEFT JOIN ticket_batches b ON t.batch_id = b.id
+            ${where}
+            ORDER BY t.redeemed_at DESC, t.id DESC`,
+      args,
+    });
+
+    const rows = ["codigo,lote,premio,fecha_canje"];
+    for (const row of result.rows) {
+      const code = String(row.id).slice(0, 8).toUpperCase();
+      const batchLabel = row.batch_label == null ? "" : String(row.batch_label).replace(/"/g, '""');
+      const prizeName = row.prize_name == null ? "" : String(row.prize_name).replace(/"/g, '""');
+      const redeemedAt = String(row.redeemed_at);
+      rows.push(`"${code}","${batchLabel}","${prizeName}","${redeemedAt}"`);
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="canjeados.csv"');
+    res.setHeader("Cache-Control", "no-store");
+    return res.send("\uFEFF" + rows.join("\r\n"));
+  } catch (error) {
+    console.error("[tickets] redeemed.csv error:", error);
+    return res.status(500).json({ message: "No se pudo exportar el CSV." });
+  }
+});
+
+/**
  * GET /api/prizes/:id/image
  * Sirve la imagen del premio con caché larga. Los premios se recrean al
  * guardar, por lo que el id (y su URL) cambia si la imagen se actualiza.
@@ -274,18 +526,18 @@ router.get("/prizes/:id/image", async (req, res) => {
 /**
  * API-ruleta para gestionar plantillas de ruleta
  */
-router.get("/roulettes", async (req, res) => {
+router.get("/roulettes", requireOperator, async (req, res) => {
   const roulettes = await getAllRoulettes();
   res.json(roulettes);
 });
 
-router.get("/roulettes/:id", async (req, res) => {
+router.get("/roulettes/:id", requireOperator, async (req, res) => {
   const roulette = await getRouletteWithPrizes(Number(req.params.id));
   if (!roulette) return res.status(404).json({ message: "Roulette not found" });
   res.json(roulette);
 });
 
-router.post("/roulettes", requireOperatorPassword, async (req, res) => {
+router.post("/roulettes", requireOperator, async (req, res) => {
   try {
     const { name, prizes } = req.body as { name: string; prizes: unknown };
     const newRoulette = await createRoulette(name, sanitizePrizes(prizes));
@@ -299,7 +551,7 @@ router.post("/roulettes", requireOperatorPassword, async (req, res) => {
   }
 });
 
-router.put("/roulettes/:id", requireOperatorPassword, async (req, res) => {
+router.put("/roulettes/:id", requireOperator, async (req, res) => {
   try {
     const { name, prizes } = req.body as { name: string; prizes: unknown };
     const updatedRoulette = await updateRoulette(
@@ -317,7 +569,7 @@ router.put("/roulettes/:id", requireOperatorPassword, async (req, res) => {
   }
 });
 
-router.delete("/roulettes/:id", requireOperatorPassword, async (req, res) => {
+router.delete("/roulettes/:id", requireOperator, async (req, res) => {
   try {
     await deleteRoulette(Number(req.params.id));
     res.status(204).send();
@@ -328,7 +580,7 @@ router.delete("/roulettes/:id", requireOperatorPassword, async (req, res) => {
   }
 });
 
-router.post("/roulettes/active/:id", requireOperatorPassword, async (req, res) => {
+router.post("/roulettes/active/:id", requireOperator, async (req, res) => {
   await setActiveRoulette(Number(req.params.id));
   res.status(200).json({ message: "Active roulette updated." });
 });

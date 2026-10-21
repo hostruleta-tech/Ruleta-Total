@@ -2,6 +2,7 @@ import {
 	ArrowRight,
 	ChevronRight,
 	ListChecks,
+	LogOut,
 	Monitor,
 	Play,
 	Radio,
@@ -9,9 +10,11 @@ import {
 	SlidersHorizontal,
 	Smartphone,
 	Target,
+	User,
 } from "lucide-react";
 import { SiteHeader } from "@/shared/components/site-header";
 import { SiteFooter } from "@/shared/components/site-footer";
+import { API_URL } from "@/shared/api";
 
 export default function Menu() {
 	function onSelectView(view: string) {
@@ -19,6 +22,18 @@ export default function Menu() {
 		url.searchParams.set("view", view);
 		window.location.href = url.toString();
 	}
+
+	const handleLogout = async () => {
+		try {
+			await fetch(`${API_URL}/auth/logout`, {
+				method: "POST",
+				credentials: "same-origin",
+			});
+		} catch {
+			// Ignorar errores
+		}
+		window.location.replace("/login-admin");
+	};
 
 	const steps = [
 		{
@@ -31,7 +46,7 @@ export default function Menu() {
 			n: 2,
 			icon: Smartphone,
 			title: "Participante abre el enlace",
-			desc: "Comparte la URL con ?view=play o el QR (próximamente).",
+			desc: "Comparte la URL con ?view=play o el QR del ticket.",
 		},
 		{
 			n: 3,
@@ -74,8 +89,19 @@ export default function Menu() {
 			{/* Vista Principal */}
 			<div className="relative z-10 flex-1 flex flex-col min-w-0 min-h-0">
 
-				{/* Header */}
-				<SiteHeader compact={true} />
+				{/* Header con logout */}
+				<div className="flex items-center justify-between px-4 py-2">
+					<SiteHeader compact={true} />
+					<button
+						type="button"
+						onClick={handleLogout}
+						className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
+						aria-label="Cerrar sesión"
+					>
+						<LogOut className="h-3.5 w-3.5" />
+						<span className="hidden sm:inline">Cerrar sesión</span>
+					</button>
+				</div>
 
 				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
 					{/* ============================================================== */}

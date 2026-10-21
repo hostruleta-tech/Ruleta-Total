@@ -1,5 +1,6 @@
 import {
 	Ban,
+	Bell,
 	Eye,
 	Download,
 	FileArchive,
@@ -9,11 +10,13 @@ import {
 	RotateCcw,
 	Ticket as TicketIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/shared/lib/utils";
 import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
+import { useLivePolling } from "./use-live-polling";
+import { API_URL } from "@/shared/api";
 import {
 	BrandButton,
 	BrandCard,
@@ -149,7 +152,7 @@ async function responseError(response: Response): Promise<string> {
 
 export function TicketManager() {
 	const toast = useToast();
-	const { operatorFetch, hasPassword, clearPassword } = useOperatorAuth();
+	const { operatorFetch, isAuthenticated, logout, checkingAuth } = useOperatorAuth();
 
 	const [quantity, setQuantity] = useState("1");
 	const [label, setLabel] = useState("");
@@ -160,11 +163,65 @@ export function TicketManager() {
 	const [result, setResult] = useState<BatchResponse | null>(null);
 	const [batches, setBatches] = useState<TicketBatchSummary[]>([]);
 
+	// Live polling state
+	const [liveCounts, setLiveCounts] = useState<{
+		total: number;
+		available: number;
+		reserved: number;
+		redeemed: number;
+		void: number;
+		expired: number;
+	} | null>(null);
+	const [liveRedeemedIds, setLiveRedeemedIds] = useState<Set<string>>(new Set());
+	const viewedBatchIdRef = useRef<string | null>(null);
+
 	const minExpiry = new Date(
 		Date.now() - new Date().getTimezoneOffset() * 60_000,
 	)
 		.toISOString()
 		.slice(0, 16);
+
+	// Live polling para el lote visto
+	const { isPolling } = useLivePolling(
+		viewedBatchIdRef.current ? `/tickets/batches/${viewedBatchIdRef.current}/live` : "",
+		{
+			enabled: !!viewedBatchIdRef.current,
+			intervalMs: 3000,
+			onTick: (data) => {
+				const live = data as {
+					batchId: string;
+					counts: { total: number; available: number; reserved: number; redeemed: number; void: number; expired: number };
+					redeemed: { id: string; prizeName: string | null; redeemedAt: string }[];
+					serverTime: string;
+				};
+				setLiveCounts(live.counts);
+				// Detectar nuevos canjeados
+				const newRedeemed = live.redeemed.filter((r) => !liveRedeemedIds.current.has(r.id));
+				for (const r of newRedeemed) {
+					liveRedeemedIds.current.add(r.id);
+					toast.success(`Canjeado: ${shortId(r.id)} — ${r.prizeName ?? "Premio"}`, {
+						icon: Bell,
+						duration: 5000,
+					});
+				}
+				// Actualizar previews: quitar canjeados
+				setResult((current) => {
+					if (!current) return current;
+					const redeemedIds = new Set(live.redeemed.map((r) => r.id));
+					return {
+						...current,
+						previews: current.previews.filter((p) => !redeemedIds.has(p.id)),
+						tickets: current.tickets.map((t) =>
+							redeemedIds.has(t.id) ? { ...t, status: "redeemed" as TicketStatus } : t
+						),
+					};
+				});
+			},
+			onError: () => {
+				// Silencioso, backoff automático
+			},
+		}
+	);
 
 	const handleGenerate = async () => {
 		const count = Number(quantity);
@@ -207,6 +264,7 @@ export function TicketManager() {
 			}
 
 			setResult(data);
+			liveRedeemedIds.current.clear();
 			const summary: TicketBatchSummary = {
 				...data.batch,
 				...countByStatus(data.tickets),
@@ -269,6 +327,13 @@ export function TicketManager() {
 				throw new Error(data.message ?? `Error ${response.status}.`);
 			}
 			setResult(data);
+			viewedBatchIdRef.current = batchId;
+			liveRedeemedIds.current.clear();
+			// Inicializar IDs ya canjeados
+			const redeemedIds = new Set(
+				data.tickets.filter((t) => t.status === "redeemed").map((t) => t.id)
+			);
+			liveRedeemedIds.current = redeemedIds;
 		} catch (error) {
 			toast.error(
 				translateMessage(
@@ -389,6 +454,11 @@ export function TicketManager() {
 	const prizeByTicket = new Map(
 		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.prizeName]),
 	);
+
+	// Usar contadores en vivo si están disponibles
+	const displayCounts = liveCounts
+		? { ...liveCounts, total: result.tickets.length }
+		: countByStatus(result?.tickets ?? []);
 
 	return (
 		<div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
@@ -552,19 +622,16 @@ export function TicketManager() {
 						)}
 					</div>
 
-					{hasPassword && (
+					{isAuthenticated && (
 						<div className="mt-4 border-t border-slate-200 pt-3">
 							<BrandButton
 								variant="ghost"
 								size="sm"
-								onClick={() => {
-									clearPassword();
-									toast.info("Contraseña olvidada en esta pestaña.");
-								}}
+								onClick={logout}
 								className="w-full"
 							>
 								<RotateCcw className="h-3.5 w-3.5" />
-								Olvidar contraseña
+								Cerrar sesión
 							</BrandButton>
 						</div>
 					)}
@@ -607,9 +674,7 @@ export function TicketManager() {
 							{(
 								Object.keys(STATUS_LABELS) as TicketStatus[]
 							).map((status) => {
-								const count = result.tickets.filter(
-									(ticket) => ticket.status === status,
-								).length;
+								const count = displayCounts[status] ?? 0;
 								if (count === 0) return null;
 								return (
 									<span
@@ -628,6 +693,7 @@ export function TicketManager() {
 						<div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
 							{result.previews.map((preview) => {
 								const status = statusByTicket.get(preview.id) ?? "available";
+								const isRedeemedOrVoid = status === "redeemed" || status === "void";
 								return (
 									<div
 										key={preview.id}
@@ -654,17 +720,19 @@ export function TicketManager() {
 												Premio: {prizeByTicket.get(preview.id)}
 											</p>
 										)}
-										<BrandButton
-											variant="outline"
-											size="sm"
-											onClick={() => handleDownloadTicket(preview.id)}
-											disabled={busyKey !== null}
-											className="mt-2 w-full"
-										>
-											<Download className="h-3.5 w-3.5" />
-											{busyKey === `qr-${preview.id}` ? "..." : "PNG"}
-										</BrandButton>
-										{status !== "redeemed" && status !== "void" && (
+										{!isRedeemedOrVoid && (
+											<BrandButton
+												variant="outline"
+												size="sm"
+												onClick={() => handleDownloadTicket(preview.id)}
+												disabled={busyKey !== null}
+												className="mt-2 w-full"
+											>
+												<Download className="h-3.5 w-3.5" />
+												{busyKey === `qr-${preview.id}` ? "..." : "PNG"}
+											</BrandButton>
+										)}
+										{!isRedeemedOrVoid && (
 											<BrandButton
 												variant="ghost"
 												size="sm"
@@ -688,6 +756,12 @@ export function TicketManager() {
 								Vista previa de {result.previews.length} de{" "}
 								{result.tickets.length} tickets. Descarga el ZIP para obtener
 								todos los PNG.
+							</p>
+						)}
+
+						{isPolling && (
+							<p className="mt-2 text-right text-[10px] font-medium text-slate-400" aria-live="polite">
+								<Bell className="h-3 w-3 inline mr-1" /> Actualizado hace unos segundos
 							</p>
 						)}
 					</BrandCard>

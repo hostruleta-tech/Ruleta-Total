@@ -1,12 +1,13 @@
 import { createContext, useContext } from "react";
 
 export interface OperatorAuthValue {
-	hasPassword: boolean;
+	isAuthenticated: boolean;
+	checkingAuth: boolean;
 	operatorFetch: (
 		path: string,
 		init?: RequestInit,
 	) => Promise<Response | null>;
-	clearPassword: () => void;
+	logout: () => Promise<void>;
 }
 
 export const OperatorAuthContext = createContext<OperatorAuthValue | null>(

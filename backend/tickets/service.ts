@@ -10,6 +10,7 @@ import {
 	insertBatchWithTickets,
 	listBatchTicketSecrets,
 	listBatchTickets,
+	mapTicket,
 } from "./repository";
 import { generateTicketToken, hashTicketToken } from "./token";
 import type {
@@ -215,15 +216,19 @@ function toPreview(secret: TicketSecretRow): Promise<TicketPreview> {
 export async function getBatchDetail(
 	client: Client,
 	batchId: string,
+	options: { onlyActivePreviews?: boolean } = {}
 ): Promise<BatchDetail> {
 	const batch = await getBatchById(client, batchId);
 	if (!batch) throw new TicketNotFoundError("El lote no existe.");
 
 	const tickets = await listBatchTickets(client, batchId);
+
+	// Filtrar previews: solo tickets activos (available/reserved) por defecto
 	const secrets = await listBatchTicketSecrets(
 		client,
 		batchId,
 		PREVIEW_COUNT,
+		options.onlyActivePreviews
 	);
 	const previews = await Promise.all(secrets.map(toPreview));
 
@@ -248,15 +253,34 @@ function csvCell(value: string | null): string {
 /**
  * ZIP con todos los PNG del lote y un manifiesto sin secretos.
  * Se genera en el servidor para no exponer los tokens en el navegador.
+ * @param includeAll Si true, incluye tickets canjeados y anulados (para auditoría).
  */
 export async function buildBatchQrZip(
 	client: Client,
 	batchId: string,
+	includeAll = false
 ): Promise<BatchZip> {
 	const batch = await getBatchById(client, batchId);
 	if (!batch) throw new TicketNotFoundError("El lote no existe.");
 
-	const secrets = await listBatchTicketSecrets(client, batchId);
+	const nowIso = new Date().toISOString();
+	let sql = `SELECT * FROM tickets WHERE batch_id = ?`;
+	const args: (string | number)[] = [batchId];
+
+	if (!includeAll) {
+		sql += ` AND (status = 'available' AND (expires_at IS NULL OR expires_at > ?)
+			OR status = 'reserved' AND reserved_until > ?)`;
+		args.push(nowIso, nowIso);
+	}
+
+	sql += ` ORDER BY created_at ASC, id ASC`;
+
+	const result = await client.execute({ sql, args });
+	const secrets = result.rows.map((row) => ({
+		ticket: mapTicket(row),
+		tokenEncrypted: String(row.token_encrypted),
+	}));
+
 	const zip = new JSZip();
 	const folder = zip.folder("tickets");
 	if (!folder) throw new Error("No se pudo crear el ZIP.");
