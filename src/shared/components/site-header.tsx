@@ -15,6 +15,8 @@ interface SiteHeaderProps {
   safeArea?: boolean;
   /** Acciones personalizadas (botones) a la derecha, en lugar del badge. */
   actions?: ReactNode;
+  /** Clases Tailwind extra para el contenedor de acciones (ej. "mr-4 sm:mr-8"). */
+  actionsClassName?: string;
 }
 
 export const SiteHeader: React.FC<SiteHeaderProps> = ({
@@ -117,7 +119,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
 
         {/* Right side: actions or badge */}
         {actions ? (
-          <div className="flex items-center gap-2">{actions}</div>
+          <div className={`flex items-center gap-2 shrink-0 ${actionsClassName ?? ""}`} style={{ marginRight: compact ? '110px' : '140px' }}>{actions}</div>
         ) : (
           showBadge && (
             <div

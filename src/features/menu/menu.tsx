@@ -1,8 +1,8 @@
 import {
 	ArrowRight,
 	ChevronRight,
+	DoorOpen,
 	ListChecks,
-	LogOut,
 	Monitor,
 	Play,
 	Radio,
@@ -92,15 +92,16 @@ export default function Menu() {
 				{/* Header con logout integrado */}
 				<SiteHeader
 					compact={true}
+					actionsClassName="mr-4 sm:mr-10"
 					actions={
 						<button
 							type="button"
 							onClick={handleLogout}
-							className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
+							className="flex items-center justify-center rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition backdrop-blur-sm"
 							aria-label="Cerrar sesión"
+							title="Cerrar sesión"
 						>
-							<LogOut className="h-3.5 w-3.5" />
-							<span className="hidden sm:inline">Cerrar sesión</span>
+							<DoorOpen className="h-4.5 w-4.5" />
 						</button>
 					}
 				/>
