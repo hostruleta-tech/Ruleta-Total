@@ -368,10 +368,25 @@ export const drawPie = ({
   ) {
     return;
   }
-  // has border
+  // has border - metallic gradient
+  const borderWidth = style.pie.borderWidth ?? 1.5;
+  // Create metallic gradient from center to edge
+  const gradient = context.createLinearGradient(
+    geometry.center.x,
+    geometry.center.y,
+    geometry.center.x + geometry.radius * Math.cos((startDeg + endDeg) / 2),
+    geometry.center.y + geometry.radius * Math.sin((startDeg + endDeg) / 2)
+  );
+  // Metallic gradient: light steel -> mid steel -> dark steel -> highlight
+  gradient.addColorStop(0, "#f0f4f7");   // bright highlight (center)
+  gradient.addColorStop(0.25, "#c3ccd3"); // light steel
+  gradient.addColorStop(0.5, "#7b868f");  // mid steel
+  gradient.addColorStop(0.75, "#4a5359"); // dark steel
+  gradient.addColorStop(1, "#f0f4f7");    // bright edge highlight
+
   context.beginPath();
-  context.strokeStyle = style.pie.borderColor;
-  context.lineWidth = style.pie.borderWidth;
+  context.strokeStyle = gradient;
+  context.lineWidth = borderWidth;
   context.moveTo(geometry.center.x, geometry.center.y);
   context.lineTo(
     geometry.center.x + geometry.radius * Math.cos(startDeg),
@@ -475,9 +490,22 @@ export const drawRoulette = ({
     return;
   }
 
-  const lineWidth = style.pie.borderWidth;
+  const lineWidth = style.pie.borderWidth ?? 1.5;
+  // Outer circle border with metallic gradient
+  const outerGradient = context.createLinearGradient(
+    geometry.center.x - geometry.radius,
+    geometry.center.y - geometry.radius,
+    geometry.center.x + geometry.radius,
+    geometry.center.y + geometry.radius
+  );
+  outerGradient.addColorStop(0, "#f0f4f7");   // top-left highlight
+  outerGradient.addColorStop(0.25, "#c3ccd3"); // light steel
+  outerGradient.addColorStop(0.5, "#7b868f");  // mid steel
+  outerGradient.addColorStop(0.75, "#39424a"); // dark steel
+  outerGradient.addColorStop(1, "#f0f4f7");    // bottom-right highlight
+
   context.beginPath();
-  context.strokeStyle = style.pie.borderColor;
+  context.strokeStyle = outerGradient;
   context.lineWidth = lineWidth;
   context.arc(
     geometry.center.x,

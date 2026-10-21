@@ -96,7 +96,7 @@ const RouletteGame: React.FC<{
         },
         arrow: { bg: "transparent" },
         pie: {
-          borderWidth: 2,
+          borderWidth: 1.5,
           borderColor: "#e2e8f0",
           border: true,
         },
@@ -110,24 +110,24 @@ const RouletteGame: React.FC<{
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* MARCO CROMADO EXTERIOR */}
+      {/* MARCO CROMADO EXTERIOR - más delgado */}
       <div
-        className="relative rounded-full p-[14px] shadow-[0_22px_45px_rgba(0,0,0,0.5),0_8px_18px_rgba(0,0,0,0.35)]"
+        className="relative rounded-full p-[9px] shadow-[0_18px_35px_rgba(0,0,0,0.5),0_6px_14px_rgba(0,0,0,0.35)]"
         style={{
           background:
             "linear-gradient(145deg, #eef2f5 0%, #c3ccd3 20%, #6e7a84 45%, #aeb9c1 62%, #2a3238 85%, #151a1e 100%)",
         }}
       >
-        {/* BISEL INTERMEDIO (ANILLO DE PROFUNDIDAD) */}
+        {/* BISEL INTERMEDIO (ANILLO DE PROFUNDIDAD) - más delgado */}
         <div
-          className="relative rounded-full p-[8px] shadow-inner"
+          className="relative rounded-full p-[5px] shadow-inner"
           style={{
             background:
               "linear-gradient(135deg, #232a2f 0%, #6f7b84 40%, #cfd7db 62%, #171c1f 100%)",
           }}
         >
-          {/* CAPA BLANCA BAJO LA RULETA (evita que se cuele el fondo) */}
-          <div className="rounded-full bg-white p-[2px] overflow-hidden flex items-center justify-center">
+          {/* CAPA BLANCA BAJO LA RULETA - más delgada */}
+          <div className="rounded-full bg-white p-[1px] overflow-hidden flex items-center justify-center">
             <Roulette roulette={roulette} />
           </div>
         </div>
@@ -545,22 +545,28 @@ export const RouletteViewHook: React.FC = () => {
           </div>
 
           {/* TÍTULOS - no se encogen */}
-          <section className="relative z-10 shrink-0 w-full text-left mb-[10px]">
+          <section
+            className="relative z-10 shrink-0 w-full text-left mb-[10px]"
+            style={{
+              transform: "rotate(8deg)",
+              transformOrigin: "left center",
+            }}
+          >
             <h1
-              className="text-[32px] font-black italic leading-none tracking-tight"
+              className="text-[36.8px] font-black italic leading-none tracking-tight"
               style={{ letterSpacing: "-0.5px" }}
             >
               <span style={{ color: "#123035" }}>Ruleta</span>{" "}
               <span style={{ color: "#007782" }}>Digital</span>
             </h1>
             <h2
-              className="text-[15px] font-extrabold mt-1"
+              className="text-[17.25px] font-extrabold mt-1"
               style={{ color: "#123035" }}
             >
               ¡Gira y gana con Total Tools!
             </h2>
             <div
-              className="w-8 h-1 rounded-[3px] mt-1.5"
+              className="w-[36.8px] h-[4.6px] rounded-[3px] mt-1.5"
               style={{ backgroundColor: "#e31821" }}
             />
           </section>
@@ -781,7 +787,7 @@ export const RouletteViewHook: React.FC = () => {
             style={{ width: "25%", paddingRight: "6px", borderRight: "1px solid rgba(255, 255, 255, 0.12)" }}
           >
             <h3
-              className="text-[11px] font-extrabold leading-snug text-white text-center"
+              className="text-[12.6px] font-extrabold leading-snug text-white text-center"
               style={{ lineHeight: "1.2" }}
             >
               ¿Cómo<br />participar?
