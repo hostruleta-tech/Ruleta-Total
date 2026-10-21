@@ -19,6 +19,7 @@ import {
 	BrandButton,
 	BrandCard,
 	BrandInput,
+	BrandLabel,
 	SectionHeading,
 } from "./panel-ui";
 
@@ -94,18 +95,6 @@ const STATUS_STYLES: Record<TicketStatus, string> = {
 	void: "bg-slate-200 text-slate-500",
 };
 
-const DATE_FORMAT_SHORT = new Intl.DateTimeFormat("es-VE", {
-	dateStyle: "medium",
-	timeStyle: "short",
-});
-
-function formatDateShort(value: string | null): string {
-	if (!value) return "Sin vencimiento";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "Fecha inválida";
-	return DATE_FORMAT_SHORT.format(date);
-}
-
 function shortId(id: string): string {
 	return id.slice(0, 8).toUpperCase();
 }
@@ -131,7 +120,7 @@ async function responseError(res: Response): Promise<string> {
 
 export function TicketManager() {
 	const toast = useToast();
-	const { operatorFetch, isAuthenticated, logout } = useOperatorAuth();
+	const { operatorFetch } = useOperatorAuth();
 
 	// --- Generación de tickets ---
 	const [quantity, setQuantity] = useState("1");

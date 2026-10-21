@@ -5,12 +5,10 @@ import {
 	ListChecks,
 	Monitor,
 	Play,
-	Radio,
 	Settings,
 	SlidersHorizontal,
 	Smartphone,
 	Target,
-	User,
 } from "lucide-react";
 import { SiteHeader } from "@/shared/components/site-header";
 import { SiteFooter } from "@/shared/components/site-footer";

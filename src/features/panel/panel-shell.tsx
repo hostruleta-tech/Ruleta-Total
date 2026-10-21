@@ -60,18 +60,8 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 				<SiteHeader
 					badge={badge}
 					showRibbon={false}
-					actionsClassName="mr-4 sm:mr-8"
 					actions={
 						<div className="flex items-center gap-2">
-							<button
-								type="button"
-								onClick={handleLogout}
-								className="rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition backdrop-blur-sm"
-								aria-label="Cerrar sesión"
-								title="Cerrar sesión"
-							>
-								<DoorOpen className="h-4 w-4" />
-							</button>
 							<button
 								type="button"
 								onClick={goToMenu}
@@ -80,6 +70,15 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 							>
 								<LayoutDashboard className="h-3.5 w-3.5" />
 								<span className="hidden sm:inline">Menú</span>
+							</button>
+							<button
+								type="button"
+								onClick={handleLogout}
+								className="rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition backdrop-blur-sm"
+								aria-label="Cerrar sesión"
+								title="Cerrar sesión"
+							>
+								<DoorOpen className="h-4.5 w-4.5" />
 							</button>
 						</div>
 					}

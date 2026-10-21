@@ -12,8 +12,6 @@ import { API_URL } from "@/shared/api";
 import { OperatorAuthContext, type OperatorAuthValue } from "./operator-auth-context";
 import { BrandButton, BrandInput, BrandLabel } from "./panel-ui";
 
-const PASSWORD_HEADER = "X-Operator-Password";
-
 interface PasswordPrompt {
 	message: string;
 	resolve: (value: string | null) => void;

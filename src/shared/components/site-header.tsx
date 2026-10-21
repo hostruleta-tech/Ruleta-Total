@@ -27,6 +27,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   compact = false,
   safeArea = false,
   actions,
+  actionsClassName,
 }) => {
   // Diagonal cut values (px from right edge at bottom)
   const cutNormal = 90;

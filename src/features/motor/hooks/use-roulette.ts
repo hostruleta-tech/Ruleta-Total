@@ -56,7 +56,7 @@ export const useRoulette = ({
     };
   }, [options]);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rouletteRef = useRef<{
     speed: number;
     totalRotation: number;
@@ -231,7 +231,7 @@ export const useRoulette = ({
   return {
     roulette: {
       size: mergedOptions.size,
-      canvasRef,
+      canvasRef: canvasRef as React.RefObject<HTMLCanvasElement>,
     },
 
     result: resultRef.current,

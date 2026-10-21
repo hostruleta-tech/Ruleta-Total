@@ -1,12 +1,10 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "./panel-toast";
 import {
 	BrandButton,
 	BrandCard,
-	BrandInput,
-	BrandLabel,
 	SectionHeading,
 } from "./panel-ui";
 import { useLivePolling } from "./use-live-polling";
@@ -55,7 +53,7 @@ export function RedeemedManager() {
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [tickets, setTickets] = useState<RedeemedTicket[]>([]);
 	const [total, setTotal] = useState(0);
-	const [limit, setLimit] = useState(50);
+	const [limit] = useState(50);
 	const [offset, setOffset] = useState(0);
 	const [isLoading, setIsLoading] = useState(false);
 	const [globalStats, setGlobalStats] = useState<{
@@ -115,7 +113,7 @@ export function RedeemedManager() {
 	}, []);
 
 	// Polling en vivo para la tabla de canjeados
-	const { isPolling, refresh: refreshTable } = useLivePolling(
+	const { isPolling } = useLivePolling(
 		`/tickets/redeemed?batchId=${selectedBatchId === "all" ? "" : selectedBatchId}&q=${encodeURIComponent(debouncedQuery)}&limit=${limit}&offset=${offset}`,
 		{
 			enabled: true,
