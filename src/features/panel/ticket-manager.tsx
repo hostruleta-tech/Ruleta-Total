@@ -452,10 +452,16 @@ export function TicketManager() {
 			expiresIso = date.toISOString();
 		}
 
+		// Clave de idempotencia única para esta creación (evita duplicados por doble clic/reintentos)
+		const idempotencyKey = `create-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 		setIsGenerating(true);
 		try {
 			const response = await operatorFetch("/tickets/batch", {
 				method: "POST",
+				headers: {
+					"Idempotency-Key": idempotencyKey,
+				},
 				body: JSON.stringify({
 					quantity: count,
 					batchLabel: label.trim() || undefined,

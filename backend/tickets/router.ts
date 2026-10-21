@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Client } from "@libsql/client";
 import { requireOperator } from "../auth/session";
+import { rateLimit, idempotency } from "../auth/rate-limit";
 import {
 	TicketConfigError,
 	TicketNotFoundError,
@@ -205,8 +206,16 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 	// ==================== RUTAS DE OPERADOR (requieren operador autenticado) ====================
 	router.use(requireOperator);
 
+	// Rate limiting: máx 2 lotes por minuto por sesión + idempotencia
+	const createRateLimit = rateLimit({
+		windowMs: 60_000, // 1 minuto
+		maxRequests: 2,   // 2 creaciones por minuto
+		keyPrefix: "tickets-create",
+		message: "Límite de creación alcanzado (máx. 2 lotes/minuto). Espera un momento.",
+	});
+
 	/** Crea un único ticket. */
-	router.post("/", async (req, res) => {
+	router.post("/", createRateLimit, idempotency(), async (req, res) => {
 		try {
 			const body = (req.body ?? {}) as {
 				batchLabel?: unknown;
@@ -239,7 +248,7 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 	});
 
 	/** Crea un lote de tickets. */
-	router.post("/batch", async (req, res) => {
+	router.post("/batch", createRateLimit, idempotency(), async (req, res) => {
 		try {
 			const body = (req.body ?? {}) as {
 				quantity?: unknown;
