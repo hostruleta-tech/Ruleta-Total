@@ -15,8 +15,11 @@ export interface NewTicketRow extends Ticket {
 	tokenEncrypted: string;
 }
 
+export type TicketScope = "active" | "redeemed";
+
 export interface ListTicketsOptions {
 	status?: TicketStatus;
+	scope?: TicketScope;
 	batchId?: string;
 	date?: string; // YYYY-MM-DD
 	limit: number;
@@ -179,6 +182,32 @@ function statusFilter(
 	return { clause: "status = ?", args: [status] };
 }
 
+function scopeFilter(
+	scope: TicketScope | undefined,
+	nowIso: string,
+): { clause: string; args: (string | number | null)[] } {
+	if (!scope) return { clause: "", args: [] };
+
+	if (scope === "active") {
+		// active = available vigente + reserved vigente
+		return {
+			clause:
+				"(status = 'available' AND (expires_at IS NULL OR expires_at > ?) OR status = 'reserved' AND reserved_until > ?)",
+			args: [nowIso, nowIso],
+		};
+	}
+
+	if (scope === "redeemed") {
+		// redeemed = canjeados + anulados
+		return {
+			clause: "status IN ('redeemed', 'void')",
+			args: [],
+		};
+	}
+
+	return { clause: "", args: [] };
+}
+
 export async function listTickets(
 	client: Client,
 	options: ListTicketsOptions,
@@ -189,6 +218,14 @@ export async function listTickets(
 	const filters: string[] = [];
 	const args: (string | number | null)[] = [];
 
+	// Scope filter (active/redeemed) - applied first
+	const scope = scopeFilter(options.scope, nowIso);
+	if (scope.clause) {
+		filters.push(scope.clause);
+		args.push(...scope.args);
+	}
+
+	// Status filter - applied on top of scope
 	const status = statusFilter(options.status, nowIso);
 	if (status.clause) {
 		filters.push(status.clause);

@@ -339,6 +339,7 @@ router.get("/tickets/redeemed.csv", requireOperator, async (req, res) => {
  * GET /api/tickets/dates
  * Lista de fechas (YYYY-MM-DD) con contadores de tickets, para agrupar por fecha en el panel.
  * Requiere autenticación de operador.
+ * Params: status?, scope? (active|redeemed)
  */
 router.get("/tickets/dates", requireOperator, async (req, res) => {
   try {
@@ -349,9 +350,24 @@ router.get("/tickets/dates", requireOperator, async (req, res) => {
     const statusRaw = req.query.status;
     const status = typeof statusRaw === "string" && statusRaw.trim() !== "" ? statusRaw.trim() : undefined;
 
+    // Filtrar por scope (active|redeemed)
+    const scopeRaw = req.query.scope;
+    const scope = typeof scopeRaw === "string" && scopeRaw.trim() !== "" ? scopeRaw.trim() : undefined;
+
     let where = "WHERE 1=1";
     const args: (string | number)[] = [];
 
+    // Scope filter (active/redeemed) - applied first
+    if (scope) {
+      if (scope === "active") {
+        where += " AND (status = 'available' AND (expires_at IS NULL OR expires_at > ?) OR status = 'reserved' AND reserved_until > ?)";
+        args.push(nowIso, nowIso);
+      } else if (scope === "redeemed") {
+        where += " AND status IN ('redeemed', 'void')";
+      }
+    }
+
+    // Status filter - applied on top of scope
     if (status) {
       // Usar estado efectivo para "available" (excluir vencidos)
       if (status === "available") {

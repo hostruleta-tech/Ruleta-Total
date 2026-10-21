@@ -42,6 +42,7 @@ import {
 
 interface ListQuery {
 	status?: TicketStatus;
+	scope?: "active" | "redeemed";
 	batchId?: string;
 	date?: string;
 	limit: number;
@@ -72,6 +73,16 @@ function parseListQuery(
 		status = rawStatus;
 	}
 
+	const rawScope = query.scope;
+	let scope: "active" | "redeemed" | undefined;
+
+	if (rawScope != null && rawScope !== "") {
+		if (rawScope !== "active" && rawScope !== "redeemed") {
+			return { error: "El scope indicado no es válido." };
+		}
+		scope = rawScope;
+	}
+
 	const rawBatchId = query.batchId;
 	const batchId =
 		typeof rawBatchId === "string" && rawBatchId.trim() !== ""
@@ -86,6 +97,7 @@ function parseListQuery(
 
 	return {
 		status,
+		scope,
 		batchId,
 		date,
 		limit: intParam(query.limit, 50, 1, 200),

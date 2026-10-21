@@ -131,6 +131,10 @@ const DATE_FORMAT_SHORT = new Intl.DateTimeFormat("es-VE", {
 	timeStyle: "short",
 });
 
+// Status options per view
+const ACTIVE_STATUS_OPTIONS: (TicketStatus | "all")[] = ["all", "available", "reserved", "expired"];
+const REDEEMED_STATUS_OPTIONS: (TicketStatus | "all")[] = ["all", "redeemed", "void"];
+
 function formatDateFull(value: string): string {
 	const date = new Date(value + "T00:00:00");
 	if (Number.isNaN(date.getTime())) return "Fecha inválida";
@@ -206,6 +210,7 @@ export function TicketManager() {
 	const [showBatchesHistory, setShowBatchesHistory] = useState(false);
 
 	// --- Vista "Todos los tickets por fecha" ---
+	const [ticketView, setTicketView] = useState<"active" | "redeemed">("active");
 	const [selectedStatus, setSelectedStatus] = useState<TicketStatus | "all">("all");
 	const [selectedDate, setSelectedDate] = useState<string | "all">("all");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -237,7 +242,7 @@ export function TicketManager() {
 	useEffect(() => {
 		loadDates();
 		loadBatches();
-	}, []);
+	}, [ticketView]);
 
 	// --- Cargar tickets cuando cambian filtros ---
 	useEffect(() => {
@@ -324,6 +329,7 @@ export function TicketManager() {
 		try {
 			const params = new URLSearchParams();
 			if (selectedStatus !== "all") params.set("status", selectedStatus);
+			params.set("scope", ticketView);
 			const response = await operatorFetch(`/tickets/dates?${params.toString()}`);
 			if (!response) return;
 			const data = (await response.json()) as DatesResponse;
@@ -344,6 +350,7 @@ export function TicketManager() {
 			const params = new URLSearchParams({
 				limit: String(TICKETS_PER_PAGE),
 				offset: String((currentPage - 1) * TICKETS_PER_PAGE),
+				scope: ticketView,
 			});
 			if (selectedStatus !== "all") params.set("status", selectedStatus);
 			if (date !== "all") params.set("date", date);
@@ -568,10 +575,10 @@ export function TicketManager() {
 	};
 
 	// --- Reset página cuando cambian filtros ---
-	useEffect(() => { setCurrentPage(1); }, [selectedStatus, selectedDate, debouncedQuery]);
+	useEffect(() => { setCurrentPage(1); }, [ticketView, selectedStatus, selectedDate, debouncedQuery]);
 
-	// --- Recargar fechas cuando cambia filtro de estado ---
-	useEffect(() => { loadDates(); }, [selectedStatus]);
+	// --- Recargar fechas cuando cambia filtro de estado o pestaña ---
+	useEffect(() => { loadDates(); }, [ticketView, selectedStatus]);
 
 	// Derived: show "Ver lote" only if we have a batch selected
 	// (We don't have a single batch view anymore, but we keep the batch history)
@@ -763,8 +770,36 @@ export function TicketManager() {
 						</div>
 					</div>
 
-					{/* Filtros: Estado + Fecha + Buscar */}
+					{/* Filtros: Pestañas Activos/Canjeados + Estado + Fecha + Buscar */}
 					<div className="mt-4 space-y-3">
+						{/* Pestañas Activos / Canjeados */}
+						<div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+							<button
+								type="button"
+								onClick={() => setTicketView("active")}
+								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+									ticketView === "active"
+										? "bg-white shadow-sm text-slate-900"
+										: "text-slate-600 hover:text-slate-900"
+								}`}
+							>
+								<TicketIcon className="h-4 w-4" />
+								<span>Activos</span>
+							</button>
+							<button
+								type="button"
+								onClick={() => setTicketView("redeemed")}
+								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+									ticketView === "redeemed"
+										? "bg-white shadow-sm text-slate-900"
+										: "text-slate-600 hover:text-slate-900"
+								}`}
+							>
+								<RotateCcw className="h-4 w-4" />
+								<span>Canjeados</span>
+							</button>
+						</div>
+
 						<div className="flex flex-wrap items-center gap-2">
 							<label htmlFor="status-filter" className="text-xs font-medium text-slate-500">Estado:</label>
 							<select
@@ -774,9 +809,11 @@ export function TicketManager() {
 								className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#005f63]/20"
 							>
 								<option value="all">Todos</option>
-								{Object.keys(STATUS_LABELS).map((s) => (
-									<option key={s} value={s}>{STATUS_LABELS[s as TicketStatus]}</option>
-								))}
+								{(ticketView === "active" ? ACTIVE_STATUS_OPTIONS : REDEEMED_STATUS_OPTIONS)
+									.filter((s) => s !== "all")
+									.map((s) => (
+										<option key={s} value={s}>{STATUS_LABELS[s as TicketStatus]}</option>
+									))}
 							</select>
 
 							<label htmlFor="date-filter" className="text-xs font-medium text-slate-500 ml-4">Fecha:</label>
@@ -820,7 +857,9 @@ export function TicketManager() {
 							<div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white/60 p-8 text-center">
 								<TicketIcon className="h-10 w-10 text-slate-300" aria-hidden="true" />
 								<p className="max-w-xs text-sm font-medium text-slate-500">
-									No hay tickets con los filtros actuales. Genera un lote o ajusta los filtros.
+									{ticketView === "active"
+										? "No hay tickets activos con los filtros actuales. Genera un lote o ajusta los filtros."
+										: "No hay tickets canjeados con los filtros actuales."}
 								</p>
 							</div>
 						)}
