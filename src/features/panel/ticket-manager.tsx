@@ -363,10 +363,10 @@ export function TicketManager() {
 		return (
 			<div
 				key={ticket.id}
-				className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 relative"
+				className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 relative overflow-hidden"
 			>
 				{/* Badge de estado */}
-				<div className="absolute -top-2 -right-2">
+				<div className="absolute top-1 right-1">
 					<span
 						className={cn(
 							"rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",

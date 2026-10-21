@@ -53,23 +53,23 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
       <div
         className="absolute inset-0 z-0"
         style={{
-          background: "linear-gradient(90deg, #00343b 0%, #00454b 100%)",
+          background: "linear-gradient(90deg, #002e35 0%, #00404a 45%, #007585 100%)",
           clipPath: `polygon(0 0, 100% 0, calc(100% - ${cut}px) 100%, 0 100%)`,
         }}
         aria-hidden="true"
       >
-        {/* White inner line near the bottom edge */}
+        {/* White inner line - pegada justo encima de la metálica */}
         <div
           style={{
             position: "absolute",
             left: 0,
             right: 0,
-            bottom: compact ? "6px" : "8px",
+            bottom: compact ? "2.5px" : "3px",
             height: compact ? "2.5px" : "3px",
             background: "#ffffff",
           }}
         />
-        {/* Metallic green line - estilo cromado horizontal (debajo de la blanca, en el borde) */}
+        {/* Metallic green line - estilo cromado horizontal (en el borde inferior) */}
         <div
           style={{
             position: "absolute",
