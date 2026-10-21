@@ -447,9 +447,9 @@ export function TicketManager() {
 	};
 
 	return (
-		<div className="flex min-h-[calc(100vh-4rem)] flex-col gap-5 p-5 lg:p-8">
+		<div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start min-h-[calc(100vh-4rem)] p-5 lg:p-8">
 			{/* Columna izquierda: Generar tickets */}
-			<div className="w-full lg:w-80 flex-shrink-0">
+			<div className="min-w-0 flex-shrink-0">
 				<BrandCard>
 					<SectionHeading
 						icon={QrCode}
