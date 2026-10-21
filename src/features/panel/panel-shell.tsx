@@ -59,7 +59,8 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 				{/* Header compartido + navegación integrada */}
 				<SiteHeader
 					badge={badge}
-					showRibbon={false}
+					showRibbon
+					actionsClassName="mr-20 sm:mr-28"
 					actions={
 						<div className="flex items-center gap-2">
 							<button

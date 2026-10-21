@@ -192,9 +192,41 @@ export function TicketManager() {
 		loadTickets();
 	}, [currentPage]);
 
-	// --- Live polling para actualizar estados de tickets visibles ---
-	const refreshStatusesRef = useRef(loadTickets);
-	refreshStatusesRef.current = loadTickets;
+	// --- Live polling para actualizar estados de tickets visibles (silencioso, sin spinner) ---
+	const refreshStatusesRef = useRef<() => Promise<void>>(async () => {});
+	refreshStatusesRef.current = async () => {
+		const visibleIds = tickets.map(t => t.id);
+		if (visibleIds.length === 0) return;
+		try {
+			const response = await operatorFetch("/tickets/lookup", {
+				method: "POST",
+				body: JSON.stringify({ ids: visibleIds }),
+			});
+			if (!response) return;
+			const data = (await response.json()) as { tickets: TicketDto[] };
+			const statusMap = new Map(data.tickets.map(t => [t.id, t.status]));
+			const prizeMap = new Map(data.tickets.map(t => [t.id, t.prizeName]));
+			setTickets(prev => {
+				const updated = prev.map(t => {
+					const newStatus = statusMap.get(t.id);
+					if (newStatus && newStatus !== t.status) {
+						return { ...t, status: newStatus, prizeName: prizeMap.get(t.id) ?? t.prizeName };
+					}
+					return t;
+				});
+				// Filtrar tickets que ya no coinciden con el scope actual
+				// (ej. canjeados en pestaña "active")
+				return updated.filter(t => {
+					if (ticketView === "active") {
+						return t.status === "available" || t.status === "reserved";
+					}
+					return t.status === "redeemed" || t.status === "void";
+				});
+			});
+		} catch {
+			// Silencioso
+		}
+	};
 
 	useLivePolling("/tickets/stats", {
 		enabled: true,
