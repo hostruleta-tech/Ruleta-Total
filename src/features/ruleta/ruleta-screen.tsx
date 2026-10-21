@@ -510,6 +510,18 @@ export const RouletteViewHook: React.FC = () => {
           boxShadow: "0 15px 40px rgba(0, 0, 0, 0.45)",
         }}
       >
+        {/* Fondo con imagen fondo-ruleta.png al 50% de opacidad */}
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundImage: "url(/fondo-ruleta.png)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            opacity: 0.5,
+          }}
+          aria-hidden="true"
+        />
         {/* HEADER COMPARTIDO */}
         <SiteHeader showRibbon={true} showBadge={false} safeArea />
 
@@ -519,7 +531,7 @@ export const RouletteViewHook: React.FC = () => {
           style={{
             padding: "20px 20px 15px 20px",
             background:
-              "radial-gradient(circle at 50% 30%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 65%), linear-gradient(135deg, rgba(230, 240, 243, 0.5) 0%, rgba(200, 218, 222, 0.5) 100%)",
+              "radial-gradient(circle at 50% 30%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 65%), linear-gradient(135deg, rgba(230, 240, 243, 0.25) 0%, rgba(200, 218, 222, 0.25) 100%)",
           }}
         >
           {/* IMAGEN DECORATIVA DIFUMINADA - ESQUINA SUPERIOR DERECHA */}

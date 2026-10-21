@@ -107,17 +107,13 @@ export const drawArrow = ({
   context.fill();
 };
 
-export interface DrawPieLabel {
-  context: CanvasRenderingContext2D;
-  geometry: Geometry;
-  pie: Pie;
-  segmentStartAngle: number;
-  anglePerSegment: number;
-  style: StyleOptionDefault;
-  /** Distancia del centro como fracción del radio (0..1). */
-  labelOffset: number;
-  /** Máximo de líneas del nombre (2 cuando hay imágenes). */
-  maxLines: number;
+/**
+ * Info de ancla de la imagen dibujada, para que el label se coloque debajo.
+ */
+interface ImageAnchor {
+  centerX: number;
+  centerY: number;
+  height: number;
 }
 
 const FONT_SIZE_PATTERN = /\d+(?:\.\d+)?px/;
@@ -185,12 +181,12 @@ const truncateText = (
 };
 
 /**
- * Dibuja el nombre del premio siempre horizontal y legible, orbitando con su
- * sector. El texto no gira con la rueda; su punto de anclaje (labelX, labelY)
- * sigue la posición del sector, pero el texto permanece en orientación horizontal
- * (0°) para máxima legibilidad en cualquier posición del círculo.
- * Si hay imágenes, el nombre se dibuja más cerca del centro y admite hasta dos
- * líneas, reduciendo el tamaño de fuente hasta que entre.
+ * Dibuja el nombre del premio siempre horizontal y legible.
+ * - Si hay imagen: se ancla justo debajo de la imagen (en Y de pantalla),
+ *   con un pequeño hueco. El texto sigue horizontal y orbita con el sector.
+ * - Si no hay imagen: se usa la posición radial original (labelOffset).
+ * En ambos casos, el ancho máximo es la cuerda del sector en el radio real
+ * del punto de anclaje, y se aplica clip al sector para no invadir vecinos.
  */
 const drawPieLabel = ({
   context,
@@ -201,18 +197,35 @@ const drawPieLabel = ({
   style,
   labelOffset,
   maxLines,
-}: DrawPieLabel): void => {
-  const { labelX, labelY } = calculateLabelPosition({
-    geometry,
-    segmentStartAngle,
-    anglePerSegment,
-    labelOffset,
-  });
+  imageAnchor,
+}: DrawPieLabel & { imageAnchor?: ImageAnchor | null }): void => {
+  let labelX: number;
+  let labelY: number;
+  let labelRadius: number;
 
-  // Ancho disponible: la cuerda del sector en el radio de la etiqueta.
-  // Al no girar el texto, usamos la cuerda (no el arco) para que el texto
-  // horizontal no invada sectores vecinos.
-  const labelRadius = geometry.radius * labelOffset;
+  if (imageAnchor) {
+    // Ancla del texto = centro de la imagen + mitad altura imagen + hueco
+    const gap = geometry.radius * 0.045; // ~4.5% del radio
+    labelX = imageAnchor.centerX;
+    labelY = imageAnchor.centerY + imageAnchor.height / 2 + gap;
+    // Radio real de este punto (distancia al centro) para calcular cuerda
+    const dx = labelX - geometry.center.x;
+    const dy = labelY - geometry.center.y;
+    labelRadius = Math.hypot(dx, dy);
+  } else {
+    // Sin imagen: posición radial original
+    const pos = calculateLabelPosition({
+      geometry,
+      segmentStartAngle,
+      anglePerSegment,
+      labelOffset,
+    });
+    labelX = pos.labelX;
+    labelY = pos.labelY;
+    labelRadius = geometry.radius * labelOffset;
+  }
+
+  // Ancho disponible: cuerda del sector en el radio real del punto de texto
   const chordHalfAngle = (anglePerSegment * Math.PI) / 360;
   const chordWidth = 2 * labelRadius * Math.sin(chordHalfAngle) * 0.92;
   const maxWidth = Math.max(16, chordWidth);
@@ -255,21 +268,8 @@ const drawPieLabel = ({
   context.restore();
 };
 
-export interface DrawPieImage {
-  context: CanvasRenderingContext2D;
-  geometry: Geometry;
-  pie: Pie;
-  segmentStartAngle: number;
-  anglePerSegment: number;
-  style: StyleOptionDefault;
-}
-
 /**
- * Dibuja la imagen del premio siempre en pie (horizontal/vertical natural),
- * orbitando con su sector. La imagen no gira con la rueda; su centro
- * (centerX, centerY) sigue la posición del sector, pero la imagen permanece
- * en su orientación natural para máxima legibilidad.
- * Se recorta al triángulo del sector para que no invada sectores vecinos.
+ * Dibuja la imagen del premio y devuelve su ancla y dimensiones en pantalla.
  */
 const drawPieImage = ({
   context,
@@ -278,9 +278,9 @@ const drawPieImage = ({
   segmentStartAngle,
   anglePerSegment,
   style,
-}: DrawPieImage): void => {
+}: DrawPieImage): ImageAnchor | null => {
   const image = getOrRequestImage(pie.image);
-  if (!image) return;
+  if (!image) return null;
 
   const midDeg = degreesToCanvasRadians(
     segmentStartAngle + anglePerSegment / 2,
@@ -303,7 +303,7 @@ const drawPieImage = ({
     width <= 0 ||
     height <= 0
   ) {
-    return;
+    return null;
   }
 
   const startDeg = degreesToCanvasRadians(segmentStartAngle);
@@ -330,7 +330,31 @@ const drawPieImage = ({
   context.shadowOffsetY = 2;
   context.drawImage(image, -width / 2, -height / 2, width, height);
   context.restore();
+
+  return { centerX, centerY, height };
 };
+
+export interface DrawPieImage {
+  context: CanvasRenderingContext2D;
+  geometry: Geometry;
+  pie: Pie;
+  segmentStartAngle: number;
+  anglePerSegment: number;
+  style: StyleOptionDefault;
+}
+
+export interface DrawPieLabel {
+  context: CanvasRenderingContext2D;
+  geometry: Geometry;
+  pie: Pie;
+  segmentStartAngle: number;
+  anglePerSegment: number;
+  style: StyleOptionDefault;
+  /** Distancia del centro como fracción del radio (0..1). */
+  labelOffset: number;
+  /** Máximo de líneas del nombre (2 cuando hay imágenes). */
+  maxLines: number;
+}
 
 export interface DrawPie {
   context: CanvasRenderingContext2D;
@@ -390,11 +414,11 @@ export const drawPie = ({
   context.beginPath();
   context.strokeStyle = gradient;
   context.lineWidth = borderWidth;
-  context.moveTo(geometry.center.x, geometry.center.y);
-  context.lineTo(
+  context.moveTo(
     geometry.center.x + geometry.radius * Math.cos(startDeg),
     geometry.center.y + geometry.radius * Math.sin(startDeg),
   );
+  context.lineTo(geometry.center.x, geometry.center.y);
   context.moveTo(geometry.center.x, geometry.center.y);
   context.lineTo(
     geometry.center.x + geometry.radius * Math.cos(endDeg),
@@ -468,20 +492,28 @@ export const drawRoulette = ({
     });
   }
 
-  // PASO 2: Dibujar todas las imágenes encima de los sectores
+  // PASO 2: Dibujar todas las imágenes y capturar sus anclas
+  const imageAnchors = new Map<string, ImageAnchor | null>();
   for (const pie of resolvedPieList) {
-    drawPieImage({
-      context,
-      geometry,
-      pie,
-      segmentStartAngle: pie.segmentStartAngle,
-      anglePerSegment,
-      style,
-    });
+    if (pie.image) {
+      const anchor = drawPieImage({
+        context,
+        geometry,
+        pie,
+        segmentStartAngle: pie.segmentStartAngle,
+        anglePerSegment,
+        style,
+      });
+      imageAnchors.set(pie.name, anchor);
+    } else {
+      imageAnchors.set(pie.name, null);
+    }
   }
 
   // PASO 3: Dibujar todos los textos encima de todo (sectores + imágenes)
+  // Usando la ancla de la imagen (si existe) para colocar el texto debajo.
   for (const pie of resolvedPieList) {
+    const imageAnchor = imageAnchors.get(pie.name) ?? null;
     drawPieLabel({
       context,
       geometry,
@@ -491,11 +523,11 @@ export const drawRoulette = ({
       style,
       labelOffset,
       maxLines: labelMaxLines,
+      imageAnchor,
     });
   }
 
   // has border - borde exterior metálico
-
   if (
     style?.pie?.border === false ||
     style?.pie?.borderWidth == null ||
