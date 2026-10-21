@@ -89,19 +89,21 @@ export default function Menu() {
 			{/* Vista Principal */}
 			<div className="relative z-10 flex-1 flex flex-col min-w-0 min-h-0">
 
-				{/* Header con logout */}
-				<div className="flex items-center justify-between px-4 py-2">
-					<SiteHeader compact={true} />
-					<button
-						type="button"
-						onClick={handleLogout}
-						className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
-						aria-label="Cerrar sesión"
-					>
-						<LogOut className="h-3.5 w-3.5" />
-						<span className="hidden sm:inline">Cerrar sesión</span>
-					</button>
-				</div>
+				{/* Header con logout integrado */}
+				<SiteHeader
+					compact={true}
+					actions={
+						<button
+							type="button"
+							onClick={handleLogout}
+							className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
+							aria-label="Cerrar sesión"
+						>
+							<LogOut className="h-3.5 w-3.5" />
+							<span className="hidden sm:inline">Cerrar sesión</span>
+						</button>
+					}
+				/>
 
 				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
 					{/* ============================================================== */}

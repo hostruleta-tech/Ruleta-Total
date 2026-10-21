@@ -115,166 +115,7 @@ router.use(express.json({ limit: "4mb" }));
 // Auth routes (login, logout, me) - públicas
 router.use("/auth", createAuthRouter(getDb));
 
-// Administración de tickets QR (todas las rutas requieren operador autenticado).
-router.use("/tickets", createTicketsRouter(getDb));
-
-// Utilidad: sorteo ponderado por probabilidad
-function pickWeightedIndex(prizes: Prize[]): number {
-  if (prizes.length === 0) return -1;
-
-  const weights = prizes.map((p) => {
-    const v = Number(p.probability);
-    return Number.isFinite(v) && v > 0 ? v : 0;
-  });
-  const total = weights.reduce((a, b) => a + b, 0);
-
-  if (total <= 0) {
-    return Math.floor(Math.random() * prizes.length);
-  }
-
-  let r = Math.random() * total;
-  for (let i = 0; i < prizes.length; i++) {
-    r -= weights[i];
-    if (r < 0) return i;
-  }
-  return prizes.length - 1;
-}
-
-/**
- * POST /api-ruleta/spin
- * El participante escanea un QR, valida su token, reserva el ticket,
- * el servidor sortea con la plantilla activa, canjea el ticket y
- * devuelve el premio junto con el ID del ticket como código de reclamación.
- * Body: { token: string }
- *
- * Modo demo (admin): sin token + sesión de operador válida -> gira sin consumir ticket.
- */
-router.post("/spin", async (req, res) => {
-  try {
-    const body = (req.body ?? {}) as { token?: unknown };
-    const token = typeof body.token === "string" ? body.token.trim() : "";
-
-    const active = await getActiveRouletteWithPrizes();
-    if (!active || !active.prizes || active.prizes.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No hay plantilla activa con premios." });
-    }
-
-    // MODO DEMO: sin token pero con sesión de operador
-    if (!token) {
-      // Verificar si hay sesión de operador (cookie o cabecera)
-      const hasOperatorSession =
-        req.get("x-operator-password") !== undefined ||
-        (await import("./auth/session")).verifySession(req);
-
-      if (!hasOperatorSession) {
-        return res.status(400).json({ message: "Token de ticket requerido." });
-      }
-
-      // Giro demo: sortear sin tocar la base de datos
-      const winnerIndex = pickWeightedIndex(active.prizes);
-      const prize = active.prizes[winnerIndex];
-
-      return res.json({
-        demo: true,
-        prizeIndex: winnerIndex,
-        prize: prize.name,
-        prizeImageUrl: prize.imageUrl ?? null,
-        prizes: active.prizes.map(toPublicPrize),
-        rouletteId: active.id,
-      });
-    }
-
-    // FLUJO NORMAL CON TICKET
-    const tokenHash = hashTicketToken(token);
-    const client = await getDb();
-
-    // 1. Validar ticket
-    const validation = await validateTicket(client, tokenHash);
-    if (!validation.valid || !validation.ticket) {
-      const statusCode = validation.reason === "not_found" ? 404 : 410;
-      return res.status(statusCode).json({
-        message: validation.reason === "not_found"
-          ? "Ticket no encontrado."
-          : validation.reason === "expired"
-          ? "Ticket expirado."
-          : validation.reason === "void"
-          ? "Ticket anulado."
-          : validation.reason === "already_redeemed"
-          ? "Ticket ya canjeado."
-          : "Ticket reservado por otra sesión.",
-        reason: validation.reason,
-        ticket: validation.ticket ? withEffectiveStatus(validation.ticket) : null,
-      });
-    }
-
-    // 2. Reservar ticket (5 min TTL)
-    const reserveResult = await reserveTicket(client, tokenHash, 5);
-    if (!reserveResult.success || !reserveResult.ticket) {
-      return res.status(409).json({
-        message: "No se pudo reservar el ticket.",
-        reason: reserveResult.reason,
-        ticket: reserveResult.ticket ? withEffectiveStatus(reserveResult.ticket) : null,
-      });
-    }
-
-    // 3. Sortear premio
-    const winnerIndex = pickWeightedIndex(active.prizes);
-    const prize = active.prizes[winnerIndex];
-
-    // 4. Canjear ticket con el premio
-    const prizeInfo: PrizeInfo = {
-      prizeId: prize.id ?? 0,
-      prizeName: prize.name,
-      rouletteId: active.id,
-    };
-    const redeemResult = await redeemTicket(client, tokenHash, prizeInfo);
-    if (!redeemResult.success || !redeemResult.ticket) {
-      // Si falla el canje, la reserva expirará en 5 min y se liberará sola
-      return res.status(500).json({
-        message: "Error al canjear el ticket.",
-        reason: redeemResult.reason,
-        ticket: redeemResult.ticket ? withEffectiveStatus(redeemResult.ticket) : null,
-      });
-    }
-
-    // 5. Responder con el premio y el ticket ID como claimCode
-    return res.json({
-      claimCode: redeemResult.ticket.id.slice(0, 8).toUpperCase(),
-      ticketId: redeemResult.ticket.id,
-      prizeIndex: winnerIndex,
-      prize: prize.name,
-      prizeImageUrl: prize.imageUrl ?? null,
-      prizes: active.prizes.map(toPublicPrize),
-      rouletteId: active.id,
-    });
-  } catch (error) {
-    console.error("Spin error:", error);
-    return res.status(500).json({ message: "Error al procesar el giro." });
-  }
-});
-
-/**
- * GET /api-ruleta/configuracion
- * La vista de la ruleta usa esto para obtener la configuración de premios ACTIVA.
- */
-// Rutas públicas: no requieren token.
-router.get("/configuracion", async (req, res) => {
-  try {
-    const activeRoulette = await getActiveRouletteWithPrizes();
-    if (!activeRoulette) {
-      return res
-        .status(404)
-        .json({ message: "No active roulette configuration found." });
-    }
-    res.json({ prizes: (activeRoulette.prizes ?? []).map(toPublicPrize) });
-  } catch (error) {
-    console.error("Configuracion error:", error);
-    res.status(500).json({ message: "Failed to fetch active configuration." });
-  }
-});
-
+// Endpoints de panel en tiempo real (DEBEN ir ANTES del router de tickets para no ser interceptados por /:id)
 /**
  * GET /api/tickets/batches/:id/live
  * Endpoint ligero para polling del panel en tiempo real.
@@ -478,8 +319,8 @@ router.get("/tickets/redeemed.csv", requireOperator, async (req, res) => {
     const rows = ["codigo,lote,premio,fecha_canje"];
     for (const row of result.rows) {
       const code = String(row.id).slice(0, 8).toUpperCase();
-      const batchLabel = row.batch_label == null ? "" : String(row.batch_label).replace(/"/g, '""');
-      const prizeName = row.prize_name == null ? "" : String(row.prize_name).replace(/"/g, '""');
+      const batchLabel = row.batch_label == null ? "" : String(row.batch_label).replace(/\"/g, '""');
+      const prizeName = row.prize_name == null ? "" : String(row.prize_name).replace(/\"/g, '""');
       const redeemedAt = String(row.redeemed_at);
       rows.push(`"${code}","${batchLabel}","${prizeName}","${redeemedAt}"`);
     }
@@ -491,6 +332,166 @@ router.get("/tickets/redeemed.csv", requireOperator, async (req, res) => {
   } catch (error) {
     console.error("[tickets] redeemed.csv error:", error);
     return res.status(500).json({ message: "No se pudo exportar el CSV." });
+  }
+});
+
+// Administración de tickets QR (todas las rutas requieren operador autenticado).
+router.use("/tickets", createTicketsRouter(getDb));
+
+// Utilidad: sorteo ponderado por probabilidad
+function pickWeightedIndex(prizes: Prize[]): number {
+  if (prizes.length === 0) return -1;
+
+  const weights = prizes.map((p) => {
+    const v = Number(p.probability);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+
+  if (total <= 0) {
+    return Math.floor(Math.random() * prizes.length);
+  }
+
+  let r = Math.random() * total;
+  for (let i = 0; i < prizes.length; i++) {
+    r -= weights[i];
+    if (r < 0) return i;
+  }
+  return prizes.length - 1;
+}
+
+/**
+ * POST /api-ruleta/spin
+ * El participante escanea un QR, valida su token, reserva el ticket,
+ * el servidor sortea con la plantilla activa, canjea el ticket y
+ * devuelve el premio junto con el ID del ticket como código de reclamación.
+ * Body: { token: string }
+ *
+ * Modo demo (admin): sin token + sesión de operador válida -> gira sin consumir ticket.
+ */
+router.post("/spin", async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { token?: unknown };
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+
+    const active = await getActiveRouletteWithPrizes();
+    if (!active || !active.prizes || active.prizes.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No hay plantilla activa con premios." });
+    }
+
+    // MODO DEMO: sin token pero con sesión de operador
+    if (!token) {
+      // Verificar si hay sesión de operador (cookie o cabecera)
+      const hasOperatorSession =
+        req.get("x-operator-password") !== undefined ||
+        (await import("./auth/session")).verifySession(req);
+
+      if (!hasOperatorSession) {
+        return res.status(400).json({ message: "Token de ticket requerido." });
+      }
+
+      // Giro demo: sortear sin tocar la base de datos
+      const winnerIndex = pickWeightedIndex(active.prizes);
+      const prize = active.prizes[winnerIndex];
+
+      return res.json({
+        demo: true,
+        prizeIndex: winnerIndex,
+        prize: prize.name,
+        prizeImageUrl: prize.imageUrl ?? null,
+        prizes: active.prizes.map(toPublicPrize),
+        rouletteId: active.id,
+      });
+    }
+
+    // FLUJO NORMAL CON TICKET
+    const tokenHash = hashTicketToken(token);
+    const client = await getDb();
+
+    // 1. Validar ticket
+    const validation = await validateTicket(client, tokenHash);
+    if (!validation.valid || !validation.ticket) {
+      const statusCode = validation.reason === "not_found" ? 404 : 410;
+      return res.status(statusCode).json({
+        message: validation.reason === "not_found"
+          ? "Ticket no encontrado."
+          : validation.reason === "expired"
+          ? "Ticket expirado."
+          : validation.reason === "void"
+          ? "Ticket anulado."
+          : validation.reason === "already_redeemed"
+          ? "Ticket ya canjeado."
+          : "Ticket reservado por otra sesión.",
+        reason: validation.reason,
+        ticket: validation.ticket ? withEffectiveStatus(validation.ticket) : null,
+      });
+    }
+
+    // 2. Reservar ticket (5 min TTL)
+    const reserveResult = await reserveTicket(client, tokenHash, 5);
+    if (!reserveResult.success || !reserveResult.ticket) {
+      return res.status(409).json({
+        message: "No se pudo reservar el ticket.",
+        reason: reserveResult.reason,
+        ticket: reserveResult.ticket ? withEffectiveStatus(reserveResult.ticket) : null,
+      });
+    }
+
+    // 3. Sortear premio
+    const winnerIndex = pickWeightedIndex(active.prizes);
+    const prize = active.prizes[winnerIndex];
+
+    // 4. Canjear ticket con el premio
+    const prizeInfo: PrizeInfo = {
+      prizeId: prize.id ?? 0,
+      prizeName: prize.name,
+      rouletteId: active.id,
+    };
+    const redeemResult = await redeemTicket(client, tokenHash, prizeInfo);
+    if (!redeemResult.success || !redeemResult.ticket) {
+      // Si falla el canje, la reserva expirará en 5 min y se liberará sola
+      return res.status(500).json({
+        message: "Error al canjear el ticket.",
+        reason: redeemResult.reason,
+        ticket: redeemResult.ticket ? withEffectiveStatus(redeemResult.ticket) : null,
+      });
+    }
+
+    // 5. Responder con el premio y el ticket ID como claimCode
+    return res.json({
+      claimCode: redeemResult.ticket.id.slice(0, 8).toUpperCase(),
+      ticketId: redeemResult.ticket.id,
+      prizeIndex: winnerIndex,
+      prize: prize.name,
+      prizeImageUrl: prize.imageUrl ?? null,
+      prizes: active.prizes.map(toPublicPrize),
+      rouletteId: active.id,
+    });
+  } catch (error) {
+    console.error("Spin error:", error);
+    return res.status(500).json({ message: "Error al procesar el giro." });
+  }
+});
+
+/**
+ * GET /api-ruleta/configuracion
+ * La vista de la ruleta usa esto para obtener la configuración de premios ACTIVA.
+ */
+// Rutas públicas: no requieren token.
+router.get("/configuracion", async (req, res) => {
+  try {
+    const activeRoulette = await getActiveRouletteWithPrizes();
+    if (!activeRoulette) {
+      return res
+        .status(404)
+        .json({ message: "No active roulette configuration found." });
+    }
+    res.json({ prizes: (activeRoulette.prizes ?? []).map(toPublicPrize) });
+  } catch (error) {
+    console.error("Configuracion error:", error);
+    res.status(500).json({ message: "Failed to fetch active configuration." });
   }
 });
 

@@ -56,30 +56,33 @@ export function PanelShell({ children, badge = "Promoción en tienda" }: PanelSh
 			</div>
 
 			<div className="relative z-10 flex-1 flex flex-col min-w-0 min-h-0">
-				{/* Header compartido + navegación */}
-				<div className="flex items-center justify-between px-4 py-2">
-					<SiteHeader badge={badge} showRibbon={false} />
-					<div className="flex items-center gap-2">
-						<button
-							type="button"
-							onClick={goToMenu}
-							className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
-							aria-label="Volver al menú"
-						>
-							<LayoutDashboard className="h-3.5 w-3.5" />
-							<span className="hidden sm:inline">Menú</span>
-						</button>
-						<button
-							type="button"
-							onClick={handleLogout}
-							className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
-							aria-label="Cerrar sesión"
-						>
-							<LogOut className="h-3.5 w-3.5" />
-							<span className="hidden sm:inline">Cerrar sesión</span>
-						</button>
-					</div>
-				</div>
+				{/* Header compartido + navegación integrada */}
+				<SiteHeader
+					badge={badge}
+					showRibbon={false}
+					actions={
+						<div className="flex items-center gap-2">
+							<button
+								type="button"
+								onClick={goToMenu}
+								className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
+								aria-label="Volver al menú"
+							>
+								<LayoutDashboard className="h-3.5 w-3.5" />
+								<span className="hidden sm:inline">Menú</span>
+							</button>
+							<button
+								type="button"
+								onClick={handleLogout}
+								className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-white text-xs font-semibold hover:bg-white/30 transition backdrop-blur-sm"
+								aria-label="Cerrar sesión"
+							>
+								<LogOut className="h-3.5 w-3.5" />
+								<span className="hidden sm:inline">Cerrar sesión</span>
+							</button>
+						</div>
+					}
+				/>
 
 				{/* Contenido scrollable (el footer aparece al llegar al final) */}
 				<main className="flex-1 min-h-0 overflow-y-auto flex flex-col">

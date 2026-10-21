@@ -203,6 +203,19 @@ export async function renderTicketQr(
 	return renderQrPng(url, QR_PRINT_WIDTH);
 }
 
+/** Data URL de un ticket concreto, para vista previa en panel. */
+export async function renderTicketQrDataUrl(
+	client: Client,
+	ticketId: string,
+): Promise<string> {
+	const secret = await getTicketSecretById(client, ticketId);
+	if (!secret) throw new TicketNotFoundError();
+
+	const token = decryptTicketToken(secret.tokenEncrypted);
+	const url = buildParticipationUrl(token);
+	return renderQrPngDataUrl(url, QR_PREVIEW_WIDTH);
+}
+
 function toPreview(secret: TicketSecretRow): Promise<TicketPreview> {
 	const token = decryptTicketToken(secret.tokenEncrypted);
 	const url = buildParticipationUrl(token);
@@ -210,6 +223,21 @@ function toPreview(secret: TicketSecretRow): Promise<TicketPreview> {
 		id: secret.ticket.id,
 		qrDataUrl,
 	}));
+}
+
+/** Devuelve data URLs QR para TODOS los tickets de un lote (panel operador). */
+export async function getBatchQrDataUrls(
+	client: Client,
+	batchId: string,
+): Promise<Record<string, string>> {
+	const secrets = await listBatchTicketSecrets(client, batchId);
+	const urls: Record<string, string> = {};
+	for (const secret of secrets) {
+		const token = decryptTicketToken(secret.tokenEncrypted);
+		const url = buildParticipationUrl(token);
+		urls[secret.ticket.id] = await renderQrPngDataUrl(url, QR_PREVIEW_WIDTH);
+	}
+	return urls;
 }
 
 /** Detalle de un lote con las primeras vistas previas para el panel. */

@@ -44,6 +44,7 @@ interface TicketDto {
 	prizeId: number | null;
 	prizeName: string | null;
 	rouletteId: number | null;
+	qrDataUrl?: string;
 }
 
 interface TicketBatchDto {
@@ -172,8 +173,32 @@ export function TicketManager() {
 		void: number;
 		expired: number;
 	} | null>(null);
-	const [liveRedeemedIds, setLiveRedeemedIds] = useState<Set<string>>(new Set());
+	const liveRedeemedIdsRef = useRef<Set<string>>(new Set());
 	const viewedBatchIdRef = useRef<string | null>(null);
+
+	// Paginación y filtro del lote abierto
+	const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">("all");
+	const [currentPage, setCurrentPage] = useState(1);
+	const TICKETS_PER_PAGE = 24;
+
+	// Filtrar tickets según el filtro de estado
+	const filteredTickets = useMemo(() => {
+		if (!result) return [];
+		return result.tickets.filter((t) => {
+			const st = statusByTicket.get(t.id) ?? "available";
+			return statusFilter === "all" || st === statusFilter;
+		});
+	}, [result, statusFilter, statusByTicket]);
+
+	// Paginación
+	const totalPages = Math.max(1, Math.ceil(filteredTickets.length / TICKETS_PER_PAGE));
+	const visibleTickets = useMemo(() => {
+		const start = (currentPage - 1) * TICKETS_PER_PAGE;
+		return filteredTickets.slice(start, start + TICKETS_PER_PAGE);
+	}, [filteredTickets, currentPage]);
+
+	// Reset página al cambiar filtro o lote
+	useEffect(() => { setCurrentPage(1); }, [statusFilter, result?.batch.id]);
 
 	const minExpiry = new Date(
 		Date.now() - new Date().getTimezoneOffset() * 60_000,
@@ -196,21 +221,20 @@ export function TicketManager() {
 				};
 				setLiveCounts(live.counts);
 				// Detectar nuevos canjeados
-				const newRedeemed = live.redeemed.filter((r) => !liveRedeemedIds.current.has(r.id));
+				const newRedeemed = live.redeemed.filter((r) => !liveRedeemedIdsRef.current.has(r.id));
 				for (const r of newRedeemed) {
-					liveRedeemedIds.current.add(r.id);
+					liveRedeemedIdsRef.current.add(r.id);
 					toast.success(`Canjeado: ${shortId(r.id)} — ${r.prizeName ?? "Premio"}`, {
 						icon: Bell,
 						duration: 5000,
 					});
 				}
-				// Actualizar previews: quitar canjeados
+				// Actualizar estados en tickets y previews: marcar canjeados, NO quitar
 				setResult((current) => {
 					if (!current) return current;
 					const redeemedIds = new Set(live.redeemed.map((r) => r.id));
 					return {
 						...current,
-						previews: current.previews.filter((p) => !redeemedIds.has(p.id)),
 						tickets: current.tickets.map((t) =>
 							redeemedIds.has(t.id) ? { ...t, status: "redeemed" as TicketStatus } : t
 						),
@@ -222,6 +246,11 @@ export function TicketManager() {
 			},
 		}
 	);
+
+	// Cargar lotes al montar
+	useEffect(() => {
+		handleLoadBatches();
+	}, []);
 
 	const handleGenerate = async () => {
 		const count = Number(quantity);
@@ -264,7 +293,7 @@ export function TicketManager() {
 			}
 
 			setResult(data);
-			liveRedeemedIds.current.clear();
+			liveRedeemedIdsRef.current.clear();
 			const summary: TicketBatchSummary = {
 				...data.batch,
 				...countByStatus(data.tickets),
@@ -317,23 +346,35 @@ export function TicketManager() {
 	const handleViewBatch = async (batchId: string) => {
 		setBusyKey(`view-${batchId}`);
 		try {
-			const response = await operatorFetch(`/tickets/batches/${batchId}`);
-			if (!response) return;
+			// Cargar detalle del lote y QR data URLs en paralelo
+			const [batchResponse, qrsResponse] = await Promise.all([
+				operatorFetch(`/tickets/batches/${batchId}`),
+				operatorFetch(`/tickets/batches/${batchId}/qrs`),
+			]);
+			if (!batchResponse || !qrsResponse) return;
 
-			const data = (await response.json()) as BatchResponse & {
-				message?: string;
-			};
-			if (!response.ok) {
-				throw new Error(data.message ?? `Error ${response.status}.`);
+			const [data, qrsData] = await Promise.all([
+				batchResponse.json() as Promise<BatchResponse & { message?: string }>,
+				qrsResponse.json() as Promise<{ qrDataUrls: Record<string, string> }>,
+			]);
+			if (!batchResponse.ok) {
+				throw new Error(data.message ?? `Error ${batchResponse.status}.`);
 			}
-			setResult(data);
+
+			// Combinar tickets con sus QR data URLs
+			const ticketsWithQr = data.tickets.map((t) => ({
+				...t,
+				qrDataUrl: qrsData.qrDataUrls[t.id] ?? "",
+			}));
+
+			setResult({ ...data, previews: ticketsWithQr });
 			viewedBatchIdRef.current = batchId;
-			liveRedeemedIds.current.clear();
+			liveRedeemedIdsRef.current.clear();
 			// Inicializar IDs ya canjeados
 			const redeemedIds = new Set(
 				data.tickets.filter((t) => t.status === "redeemed").map((t) => t.id)
 			);
-			liveRedeemedIds.current = redeemedIds;
+			liveRedeemedIdsRef.current = redeemedIds;
 		} catch (error) {
 			toast.error(
 				translateMessage(
@@ -350,7 +391,7 @@ export function TicketManager() {
 		setBusyKey(`zip-${batchId}`);
 		try {
 			const response = await operatorFetch(
-				`/tickets/batches/${batchId}/qr.zip`,
+				`/tickets/batches/${batchId}/qr.zip?include=all`,
 			);
 			if (!response) return;
 			if (!response.ok) {
@@ -690,80 +731,117 @@ export function TicketManager() {
 							})}
 						</div>
 
-						<div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-							{result.previews.map((preview) => {
-								const status = statusByTicket.get(preview.id) ?? "available";
-								const isRedeemedOrVoid = status === "redeemed" || status === "void";
-								return (
-									<div
-										key={preview.id}
-										className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3"
-									>
-										<img
-											src={preview.qrDataUrl}
-											alt={`Código QR del ticket ${shortId(preview.id)}`}
-											className="mx-auto w-full max-w-[180px] rounded-lg border border-slate-200 bg-white"
-										/>
-										<p className="mt-2 text-center font-mono text-xs font-bold tracking-wide text-slate-700">
-											{shortId(preview.id)}
-										</p>
-										<span
-											className={cn(
-												"mx-auto mt-1 block w-fit rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-												STATUS_STYLES[status],
-											)}
-										>
-											{STATUS_LABELS[status]}
-										</span>
-										{status === "redeemed" && prizeByTicket.get(preview.id) && (
-											<p className="mt-1 text-center text-[10px] font-semibold text-slate-500">
-												Premio: {prizeByTicket.get(preview.id)}
-											</p>
-										)}
-										{!isRedeemedOrVoid && (
-											<BrandButton
-												variant="outline"
-												size="sm"
-												onClick={() => handleDownloadTicket(preview.id)}
-												disabled={busyKey !== null}
-												className="mt-2 w-full"
-											>
-												<Download className="h-3.5 w-3.5" />
-												{busyKey === `qr-${preview.id}` ? "..." : "PNG"}
-											</BrandButton>
-										)}
-										{!isRedeemedOrVoid && (
-											<BrandButton
-												variant="ghost"
-												size="sm"
-												onClick={() => handleVoidTicket(preview.id)}
-												disabled={busyKey !== null}
-												className="mt-1 w-full"
-											>
-												<Ban className="h-3.5 w-3.5" />
-												{busyKey === `void-${preview.id}`
-													? "..."
-													: "Anular"}
-											</BrandButton>
-										)}
-									</div>
-								);
-							})}
-						</div>
-
-						{result.tickets.length > result.previews.length && (
-							<p className="mt-4 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-medium text-teal-700">
-								Vista previa de {result.previews.length} de{" "}
-								{result.tickets.length} tickets. Descarga el ZIP para obtener
-								todos los PNG.
-							</p>
-						)}
-
 						{isPolling && (
 							<p className="mt-2 text-right text-[10px] font-medium text-slate-400" aria-live="polite">
 								<Bell className="h-3 w-3 inline mr-1" /> Actualizado hace unos segundos
 							</p>
 						)}
+
+						{/* Filtros y paginación del lote */} 
+						<div className="mt-4 space-y-3">
+							<div className="flex flex-wrap items-center gap-2">
+								<label htmlFor="status-filter" className="text-xs font-medium text-slate-500">Filtrar:</label>
+								<select
+									id="status-filter"
+									value={statusFilter}
+									onChange={(e) => { setStatusFilter(e.target.value as TicketStatus | "all"); setCurrentPage(1); }}
+									className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#005f63]/20"
+								>
+									<option value="all">Todos</option>
+									{Object.keys(STATUS_LABELS).map((s) => (
+										<option key={s} value={s}>{STATUS_LABELS[s as TicketStatus]}</option>
+									))}
+								</select>
+								<span className="ml-auto text-xs text-slate-400">
+									{filteredTickets.length} de {result.tickets.length} tickets
+								</span>
+							</div>
+
+							{/* Grid de tickets */} 
+							<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+								{visibleTickets.map((ticket) => {
+									const status = statusByTicket.get(ticket.id) ?? "available";
+									const isRedeemedOrVoid = status === "redeemed" || status === "void";
+									return (
+										<div
+											key={ticket.id}
+											className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3"
+										>
+											<img
+												src={ticket.qrDataUrl}
+												alt={`Código QR del ticket ${shortId(ticket.id)}`}
+												className="mx-auto w-full max-w-[180px] rounded-lg border border-slate-200 bg-white"
+											/>
+											<p className="mt-2 text-center font-mono text-xs font-bold tracking-wide text-slate-700">
+												{shortId(ticket.id)}
+											</p>
+											<span
+												className={cn(
+													"mx-auto mt-1 block w-fit rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+													STATUS_STYLES[status],
+												)}
+											>
+												{STATUS_LABELS[status]}
+											</span>
+											{status === "redeemed" && prizeByTicket.get(ticket.id) && (
+												<p className="mt-1 text-center text-[10px] font-semibold text-slate-500">
+													Premio: {prizeByTicket.get(ticket.id)}
+												</p>
+											)}
+											{!isRedeemedOrVoid && (
+												<BrandButton
+													variant="outline"
+													size="sm"
+													onClick={() => handleDownloadTicket(ticket.id)}
+													disabled={busyKey !== null}
+													className="mt-2 w-full"
+												>
+													<Download className="h-3.5 w-3.5" />
+													{busyKey === `qr-${ticket.id}` ? "..." : "PNG"}
+												</BrandButton>
+											)}
+											{!isRedeemedOrVoid && (
+												<BrandButton
+													variant="ghost"
+													size="sm"
+													onClick={() => handleVoidTicket(ticket.id)}
+													disabled={busyKey !== null}
+													className="mt-1 w-full"
+												>
+													<Ban className="h-3.5 w-3.5" />
+													{busyKey === `void-${ticket.id}` ? "..." : "Anular"}
+												</BrandButton>
+											)}
+										</div>
+									);
+								})}
+							</div>
+
+							{/* Paginación */} 
+							{totalPages > 1 && (
+								<div className="flex items-center justify-center gap-2">
+									<BrandButton
+										variant="light"
+										size="sm"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-3.5 w-3.5" />
+									</BrandButton>
+									<span className="text-sm font-medium text-slate-500">
+										Página {currentPage} de {totalPages}
+									</span>
+									<BrandButton
+										variant="light"
+										size="sm"
+										onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+										disabled={currentPage === totalPages}
+									>
+										<ChevronRight className="h-3.5 w-3.5" />
+									</BrandButton>
+								</div>
+							)}
+						</div>
 					</BrandCard>
 				) : (
 					<div className="flex min-h-[360px] flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white/60 p-8 text-center">

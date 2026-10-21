@@ -23,6 +23,7 @@ import {
 	buildBatchQrZip,
 	createTickets,
 	getBatchDetail,
+	getBatchQrDataUrls,
 	renderTicketQr,
 } from "./service";
 import {
@@ -321,7 +322,18 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 		}
 	});
 
-	/** PNG individual para descarga o reimpresión. No disponible para canjeados/anulados. */
+	/** Data URLs QR para TODOS los tickets del lote (panel operador). */
+	router.get("/batches/:id/qrs", async (req, res) => {
+		try {
+			const client = await getClient();
+			const qrDataUrls = await getBatchQrDataUrls(client, req.params.id);
+			return res.json({ qrDataUrls });
+		} catch (error) {
+			return handleError(res, "batch-qrs", error);
+		}
+	});
+
+	/** PNG individual para descarga o reimpresión. Disponible para todos los estados. */
 	router.get("/:id/qr", async (req, res) => {
 		try {
 			const client = await getClient();
@@ -329,10 +341,7 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 			if (!ticket) {
 				return res.status(404).json({ message: "El ticket no existe." });
 			}
-			const effective = effectiveStatus(ticket);
-			if (effective === "redeemed" || effective === "void") {
-				return res.status(410).json({ message: "Ticket ya canjeado." });
-			}
+			// Permitir descarga de PNG para todos los estados (incluyendo canjeados/anulados)
 			const png = await renderTicketQr(client, req.params.id);
 
 			res.setHeader("Content-Type", "image/png");

@@ -258,83 +258,83 @@ export const RouletteViewHook: React.FC = () => {
   });
   const [hasSpun, setHasSpun] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [lastSpinWasDemo, setLastSpinWasDemo] = useState(false);
   const isModalOpen = finalResult !== null;
 
   // Lee el token del fragmento, lo borra de la barra de direcciones y lo
   // valida contra el servidor sin consumir el ticket.
   useEffect(() => {
-    const token = readTokenFromHash();
+    let cancelled = false;
 
-    // Verificar sesión de admin en paralelo
-    const checkAdmin = async () => {
+    const init = async () => {
+      const token = readTokenFromHash();
+
+      // Verificar sesión de admin PRIMERO
+      let autenticado = false;
       try {
         const res = await fetch(`${API_URL}/auth/me`, {
           credentials: "same-origin",
           cache: "no-store",
         });
         const data = (await res.json().catch(() => ({}))) as { authenticated?: boolean };
-        setIsAdmin(data.authenticated === true);
+        autenticado = data.authenticated === true;
       } catch {
-        setIsAdmin(false);
+        autenticado = false;
       }
-    };
-    checkAdmin();
+      setIsAdmin(autenticado);
 
-    if (!token) {
-      if (isAdmin) {
-        setTicketState({ kind: "admin" });
-      } else {
-        setTicketState({ kind: "missing" });
+      if (cancelled) return;
+
+      if (!token) {
+        setTicketState({ kind: autenticado ? "admin" : "missing" });
+        return;
       }
-      return;
-    }
 
-    setTicketToken(token);
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}`,
-    );
+      setTicketToken(token);
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
 
-    let cancelled = false;
-
-    const validate = async () => {
-      try {
-        const response = await fetch(`${API_URL}/tickets/validate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        });
-        const data = (await response.json().catch(() => ({}))) as {
-          valid?: boolean;
-          ticket?: { id?: string } | null;
-          reason?: string;
-        };
-
-        if (cancelled) return;
-
-        if (response.ok && data.valid && data.ticket?.id) {
-          setTicketState({ kind: "valid", ticketId: String(data.ticket.id) });
-        } else {
-          setTicketState({
-            kind: "invalid",
-            message: ticketReasonMessage(data.reason),
+      const validate = async () => {
+        try {
+          const response = await fetch(`${API_URL}/tickets/validate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
           });
+          const data = (await response.json().catch(() => ({}))) as {
+            valid?: boolean;
+            ticket?: { id?: string } | null;
+            reason?: string;
+          };
+
+          if (cancelled) return;
+
+          if (response.ok && data.valid && data.ticket?.id) {
+            setTicketState({ kind: "valid", ticketId: String(data.ticket.id) });
+          } else {
+            setTicketState({
+              kind: "invalid",
+              message: ticketReasonMessage(data.reason),
+            });
+          }
+        } catch {
+          if (!cancelled) {
+            setTicketState({
+              kind: "invalid",
+              message: "No se pudo validar el ticket. Revisa tu conexión.",
+            });
+          }
         }
-      } catch {
-        if (!cancelled) {
-          setTicketState({
-            kind: "invalid",
-            message: "No se pudo validar el ticket. Revisa tu conexión.",
-          });
-        }
-      }
+      };
+
+      validate();
     };
 
-    validate();
-    return () => {
-      cancelled = true;
-    };
+    init();
+    return () => { cancelled = true; };
   }, []);
 
   // Re-verificar sesión de admin al volver a la pestaña
@@ -453,6 +453,9 @@ export const RouletteViewHook: React.FC = () => {
       if (!spinData.demo) {
         setClaimCode(spinData.claimCode);
         setHasSpun(true);
+        setLastSpinWasDemo(false);
+      } else {
+        setLastSpinWasDemo(true);
       }
 
       const winningPrize = spinData.prizes[spinData.prizeIndex];
@@ -712,7 +715,9 @@ export const RouletteViewHook: React.FC = () => {
                   style={{ color: "#7b969b" }}
                 >
                   {finalResult
-                    ? `¡Felicidades! Código: ${claimCode}`
+                    ? lastSpinWasDemo
+                      ? `¡Giro de prueba! Premio: ${finalResult} (no consume ticket)`
+                      : `¡Felicidades! Código: ${claimCode}`
                     : ticketState.kind === "valid"
                     ? "Pulsa GIRAR RULETA para participar."
                     : ticketState.kind === "checking"

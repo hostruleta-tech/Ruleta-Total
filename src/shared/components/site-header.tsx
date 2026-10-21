@@ -1,4 +1,4 @@
-import React from "react";
+import React, { type ReactNode } from "react";
 import logoTotal from "@/assets/logotipo-total.png";
 
 interface SiteHeaderProps {
@@ -13,6 +13,8 @@ interface SiteHeaderProps {
   compact?: boolean;
   /** Respeta el notch/barra de estado cuando la app va a pantalla completa. */
   safeArea?: boolean;
+  /** Acciones personalizadas (botones) a la derecha, en lugar del badge. */
+  actions?: ReactNode;
 }
 
 export const SiteHeader: React.FC<SiteHeaderProps> = ({
@@ -119,37 +121,41 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
           </span>
         </div>
 
-        {/* Store badge - Promoción en tienda (moved left to clear diagonal cut) */}
-        {showBadge && (
-          <div
-            className="flex items-center gap-1.5 rounded-full"
-            style={{
-              background: "rgba(255, 255, 255, 0.12)",
-              border: "1px solid rgba(255, 255, 255, 0.35)",
-              padding: compact ? "4px 13px" : "8px 18px",
-              backdropFilter: "blur(4px)",
-              marginRight: `${badgeMarginRight}px`,
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={compact ? "w-[18px] h-[18px] text-white shrink-0" : "w-[18px] h-[18px] text-white shrink-0"}
-              aria-hidden="true"
+        {/* Right side: actions or badge */}
+        {actions ? (
+          <div className="flex items-center gap-2">{actions}</div>
+        ) : (
+          showBadge && (
+            <div
+              className="flex items-center gap-1.5 rounded-full"
+              style={{
+                background: "rgba(255, 255, 255, 0.12)",
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+                padding: compact ? "4px 13px" : "8px 18px",
+                backdropFilter: "blur(4px)",
+                marginRight: `${badgeMarginRight}px`,
+              }}
             >
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            <span className={compact ? "whitespace-nowrap text-[10px] font-semibold text-white" : "whitespace-nowrap text-[13px] font-semibold text-white"}>
-              {badge}
-            </span>
-          </div>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={compact ? "w-[18px] h-[18px] text-white shrink-0" : "w-[18px] h-[18px] text-white shrink-0"}
+                aria-hidden="true"
+              >
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              <span className={compact ? "whitespace-nowrap text-[10px] font-semibold text-white" : "whitespace-nowrap text-[13px] font-semibold text-white"}>
+                {badge}
+              </span>
+            </div>
+          )
         )}
       </div>
     </header>
