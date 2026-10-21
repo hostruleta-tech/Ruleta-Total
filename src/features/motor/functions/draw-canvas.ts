@@ -185,10 +185,10 @@ const truncateText = (
 };
 
 /**
- * Dibuja el nombre del premio pegado a su sector: la palabra gira con la rueda
- * y sigue el arco (orientación tangencial). Así, cuando el sector queda bajo la
- * flecha superior el texto se lee horizontal, y en la parte inferior aparece
- * boca abajo, como en una ruleta física.
+ * Dibuja el nombre del premio siempre horizontal y legible, orbitando con su
+ * sector. El texto no gira con la rueda; su punto de anclaje (labelX, labelY)
+ * sigue la posición del sector, pero el texto permanece en orientación horizontal
+ * (0°) para máxima legibilidad en cualquier posición del círculo.
  * Si hay imágenes, el nombre se dibuja más cerca del centro y admite hasta dos
  * líneas, reduciendo el tamaño de fuente hasta que entre.
  */
@@ -202,27 +202,27 @@ const drawPieLabel = ({
   labelOffset,
   maxLines,
 }: DrawPieLabel): void => {
-  const { labelX, labelY, labelAngle } = calculateLabelPosition({
+  const { labelX, labelY } = calculateLabelPosition({
     geometry,
     segmentStartAngle,
     anglePerSegment,
     labelOffset,
   });
 
-  // Ancho disponible: el arco del sector en el radio de la etiqueta. La palabra
-  // corre en dirección tangencial, es decir, a lo largo de ese arco.
+  // Ancho disponible: la cuerda del sector en el radio de la etiqueta.
+  // Al no girar el texto, usamos la cuerda (no el arco) para que el texto
+  // horizontal no invada sectores vecinos.
   const labelRadius = geometry.radius * labelOffset;
-  const arcWidth = labelRadius * ((anglePerSegment * Math.PI) / 180) * 0.92;
-  const maxWidth = Math.max(16, arcWidth);
+  const chordHalfAngle = (anglePerSegment * Math.PI) / 360;
+  const chordWidth = 2 * labelRadius * Math.sin(chordHalfAngle) * 0.92;
+  const maxWidth = Math.max(16, chordWidth);
 
   const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
   const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
 
   context.save();
-  // Matriz fijada desde cero y giro tangencial (+90° sobre el ángulo del
-  // sector): el texto queda anclado a su porción y gira con la rueda.
+  // Texto siempre horizontal: solo trasladamos al punto de anclaje, sin rotar.
   context.setTransform(1, 0, 0, 1, labelX, labelY);
-  context.rotate(labelAngle + Math.PI / 2);
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = pie.color;
@@ -265,8 +265,11 @@ export interface DrawPieImage {
 }
 
 /**
- * Dibuja la imagen del premio dentro de su sector, tangencial a la rueda y
- * recortada al triángulo para que no invada los sectores vecinos.
+ * Dibuja la imagen del premio siempre en pie (horizontal/vertical natural),
+ * orbitando con su sector. La imagen no gira con la rueda; su centro
+ * (centerX, centerY) sigue la posición del sector, pero la imagen permanece
+ * en su orientación natural para máxima legibilidad.
+ * Se recorta al triángulo del sector para que no invada sectores vecinos.
  */
 const drawPieImage = ({
   context,
@@ -320,8 +323,8 @@ const drawPieImage = ({
   context.closePath();
   context.clip();
 
+  // Imagen siempre en orientación natural: solo trasladamos, sin rotar.
   context.setTransform(1, 0, 0, 1, centerX, centerY);
-  context.rotate(midDeg + Math.PI / 2);
   context.shadowColor = style.image.shadowColor;
   context.shadowBlur = style.image.shadowBlur;
   context.shadowOffsetY = 2;
@@ -431,6 +434,9 @@ export const drawRoulette = ({
     const theme = style.pie.theme[index % style.pie.theme.length];
     const bg = pie.bg || theme.bg;
 
+    const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
+    segmentEndAngle = segmentStartAngle;
+
     return {
       name: pie.name,
       bg,
@@ -438,6 +444,7 @@ export const drawRoulette = ({
       // Los verdes de la paleta por defecto siempre llevan texto blanco;
       // cualquier otro fondo se resuelve con auto-contraste.
       color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
+      segmentStartAngle,
     };
   });
 
@@ -449,38 +456,45 @@ export const drawRoulette = ({
     : style.label.offset;
   const labelMaxLines = hasImages ? 2 : 1;
 
+  // PASO 1: Dibujar todos los sectores (fondos + bordes internos)
   for (const pie of resolvedPieList) {
-    const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
     drawPie({
       context,
       geometry,
       pie,
-      segmentStartAngle,
+      segmentStartAngle: pie.segmentStartAngle,
       anglePerSegment,
       style,
     });
+  }
+
+  // PASO 2: Dibujar todas las imágenes encima de los sectores
+  for (const pie of resolvedPieList) {
     drawPieImage({
       context,
       geometry,
       pie,
-      segmentStartAngle,
+      segmentStartAngle: pie.segmentStartAngle,
       anglePerSegment,
       style,
     });
+  }
+
+  // PASO 3: Dibujar todos los textos encima de todo (sectores + imágenes)
+  for (const pie of resolvedPieList) {
     drawPieLabel({
       context,
       geometry,
       pie,
-      segmentStartAngle,
+      segmentStartAngle: pie.segmentStartAngle,
       anglePerSegment,
       style,
       labelOffset,
       maxLines: labelMaxLines,
     });
-    segmentEndAngle = segmentStartAngle;
   }
 
-  // has border
+  // has border - borde exterior metálico
 
   if (
     style?.pie?.border === false ||

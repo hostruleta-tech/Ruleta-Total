@@ -18,13 +18,13 @@ import logoTotal from "@/assets/logotipo-total.png";
 import { SiteHeader } from "@/shared/components/site-header";
 import { SiteFooter } from "@/shared/components/site-footer";
 
-// Grosor del marco cromado por lado (p-[14px] + p-[8px] + p-[2px]) + aire lateral
-const FRAME_THICKNESS = 24;
+// Grosor del marco cromado por lado (p-[9px] + p-[5px] + p-[1px]) + aire lateral
+const FRAME_THICKNESS = 15;
 const WHEEL_MARGIN = 8;
 const FRAME_PADDING = FRAME_THICKNESS * 2 + WHEEL_MARGIN;
 const MIN_WHEEL = 180;
-// Máximo = ancho interior del marco móvil (440 - 40 padding) - FRAME_PADDING = 344
-const MAX_WHEEL = 344;
+// Tope máximo para pantallas muy grandes
+const MAX_WHEEL = 560;
 
 /** Tamaño de la ruleta calculado a partir del área real (ResizeObserver) */
 const useWheelSize = (areaRef: React.RefObject<HTMLDivElement | null>) => {
@@ -38,7 +38,8 @@ const useWheelSize = (areaRef: React.RefObject<HTMLDivElement | null>) => {
       const rect = element.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const available = Math.min(rect.width, rect.height) - FRAME_PADDING;
+      // Usa ancho completo + 20% de alto extra (evita solaparse con botón girar)
+      const available = Math.min(rect.width, rect.height * 1.2) - FRAME_PADDING;
       const clamped = Math.min(Math.max(available, MIN_WHEEL), MAX_WHEEL);
       setSize(Math.round(clamped));
     };
