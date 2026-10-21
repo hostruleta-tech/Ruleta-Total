@@ -1,7 +1,6 @@
 import { Router } from "express";
 import type { Client } from "@libsql/client";
 import { requireOperator } from "../auth/session";
-import { rateLimit, idempotency } from "../auth/rate-limit";
 import {
 	TicketConfigError,
 	TicketNotFoundError,
@@ -130,9 +129,9 @@ function handleError(
  * servidor elige el premio. Así nadie puede fijar un premio arbitrario.
  *
  * Rutas de operador (requieren X-Operator-Password):
- *   POST   /api/tickets           - Crea ticket individual
- *   POST   /api/tickets/batch     - Crea lote
+ *   POST   /api/tickets/batch    - Crea lote
  *   GET    /api/tickets           - Lista tickets
+ *   POST   /api/tickets/lookup   - Obtiene tickets por IDs (máx 200)
  *   GET    /api/tickets/batches   - Lista lotes
  *   GET    /api/tickets/batches/:id - Detalle lote
  *   GET    /api/tickets/batches/:id/qr.zip - ZIP lote
@@ -206,49 +205,8 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 	// ==================== RUTAS DE OPERADOR (requieren operador autenticado) ====================
 	router.use(requireOperator);
 
-	// Rate limiting: máx 2 lotes por minuto por sesión + idempotencia
-	const createRateLimit = rateLimit({
-		windowMs: 60_000, // 1 minuto
-		maxRequests: 2,   // 2 creaciones por minuto
-		keyPrefix: "tickets-create",
-		message: "Límite de creación alcanzado (máx. 2 lotes/minuto). Espera un momento.",
-	});
-
-	/** Crea un único ticket. */
-	router.post("/", createRateLimit, idempotency(), async (req, res) => {
-		try {
-			const body = (req.body ?? {}) as {
-				batchLabel?: unknown;
-				expiresAt?: unknown;
-			};
-			const client = await getClient();
-			const result = await createTickets(client, {
-				quantity: 1,
-				batchLabel: body.batchLabel,
-				expiresAt: body.expiresAt,
-			});
-
-			const first = result.tickets[0];
-			if (!first) throw new Error("No se pudo crear el ticket.");
-
-			const qrDataUrl = await renderQrPngDataUrl(
-				first.participationUrl,
-				QR_PRINT_WIDTH,
-			);
-
-			return res.status(201).json({
-				ticket: first.ticket,
-				batch: result.batch,
-				participationUrl: first.participationUrl,
-				qrDataUrl,
-			});
-		} catch (error) {
-			return handleError(res, "create-single", error);
-		}
-	});
-
 	/** Crea un lote de tickets. */
-	router.post("/batch", createRateLimit, idempotency(), async (req, res) => {
+	router.post("/batch", async (req, res) => {
 		try {
 			const body = (req.body ?? {}) as {
 				quantity?: unknown;
@@ -291,36 +249,6 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 			});
 		} catch (error) {
 			return handleError(res, "list-tickets", error);
-		}
-	});
-
-	/** Obtener tickets por IDs (para actualización de estados en vivo).
-	 *  Body: { ids: string[] } (máx 200 IDs)
-	 *  Devuelve: { tickets: TicketDto[] }
-	 */
-	router.post("/", async (req, res) => {
-		try {
-			const body = (req.body ?? {}) as { ids?: unknown };
-			const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string") : [];
-
-			if (ids.length === 0) {
-				return res.json({ tickets: [] });
-			}
-			if (ids.length > 200) {
-				return res.status(400).json({ message: "Máximo 200 tickets por petición." });
-			}
-
-			const client = await getClient();
-			const placeholders = ids.map(() => "?").join(",");
-			const result = await client.execute({
-				sql: `SELECT * FROM tickets WHERE id IN (${placeholders})`,
-				args: ids,
-			});
-
-			const tickets = result.rows.map((row) => withEffectiveStatus(mapTicket(row)));
-			return res.json({ tickets });
-		} catch (error) {
-			return handleError(res, "tickets-by-ids", error);
 		}
 	});
 
@@ -445,6 +373,36 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 			return res.send(png);
 		} catch (error) {
 			return handleError(res, "ticket-qr", error);
+		}
+	});
+
+	/** Obtener tickets por IDs (para actualización de estados en vivo).
+	 *  Body: { ids: string[] } (máx 200 IDs)
+	 *  Devuelve: { tickets: TicketDto[] }
+	 */
+	router.post("/lookup", async (req, res) => {
+		try {
+			const body = (req.body ?? {}) as { ids?: unknown };
+			const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string") : [];
+
+			if (ids.length === 0) {
+				return res.json({ tickets: [] });
+			}
+			if (ids.length > 200) {
+				return res.status(400).json({ message: "Máximo 200 tickets por petición." });
+			}
+
+			const client = await getClient();
+			const placeholders = ids.map(() => "?").join(",");
+			const result = await client.execute({
+				sql: `SELECT * FROM tickets WHERE id IN (${placeholders})`,
+				args: ids,
+			});
+
+			const tickets = result.rows.map((row) => withEffectiveStatus(mapTicket(row)));
+			return res.json({ tickets });
+		} catch (error) {
+			return handleError(res, "tickets-by-ids", error);
 		}
 	});
 

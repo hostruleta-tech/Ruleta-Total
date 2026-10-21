@@ -51,17 +51,19 @@ describe("API de tickets", () => {
 
 	it("crea un ticket individual y devuelve su QR", async () => {
 		const response = await request(app)
-			.post("/tickets")
+			.post("/tickets/batch")
 			.set("X-Operator-Password", TEST_PASSWORD)
-			.send({ batchLabel: "Individual" })
+			.send({ quantity: 1, batchLabel: "Individual" })
 			.expect(201);
 
-		expect(response.body.ticket.status).toBe("available");
-		expect(response.body.ticket.batchId).toBe(response.body.batch.id);
-		expect(response.body.participationUrl).toContain("#t=");
-		expect(response.body.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+		expect(response.body.batch.quantity).toBe(1);
+		expect(response.body.tickets).toHaveLength(1);
+		expect(response.body.tickets[0].status).toBe("available");
+		expect(response.body.tickets[0].batchId).toBe(response.body.batch.id);
+		expect(response.body.previews).toHaveLength(1);
+		expect(response.body.previews[0].qrDataUrl).toMatch(/^data:image\/png;base64,/);
 
-		const serialized = JSON.stringify(response.body.ticket);
+		const serialized = JSON.stringify(response.body.tickets[0]);
 		expect(serialized).not.toContain("token_hash");
 		expect(serialized).not.toContain("token_encrypted");
 	});

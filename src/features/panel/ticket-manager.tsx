@@ -12,7 +12,7 @@ import {
 	Search,
 	Ticket as TicketIcon,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/shared/lib/utils";
 import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
@@ -217,6 +217,10 @@ export function TicketManager() {
 	const [isLoadingTickets, setIsLoadingTickets] = useState(false);
 	const [busyKey, setBusyKey] = useState<string | null>(null);
 
+	// Ref estable para el callback de refresco (evita reiniciar el polling en cada render)
+	const refreshStatusesRef = useRef(refreshVisibleTicketStatuses);
+	refreshStatusesRef.current = refreshVisibleTicketStatuses;
+
 	// QR loading state per ticket
 	const [qrLoading, setQrLoading] = useState<Set<string>>(new Set());
 	const [qrCache, setQrCache] = useState<Record<string, string>>({});
@@ -246,7 +250,6 @@ export function TicketManager() {
 	}, [selectedDate, selectedStatus, debouncedQuery]);
 
 	// --- Live polling para actualizar estados de tickets visibles ---
-	// --- Live polling para actualizar estados de tickets visibles ---
 	const refreshVisibleTicketStatuses = useCallback(async () => {
 		const visibleIds = new Set<string>();
 		for (const group of dateGroups) {
@@ -256,7 +259,7 @@ export function TicketManager() {
 		}
 		if (visibleIds.size === 0) return;
 		try {
-			const res = await operatorFetch("/tickets", {
+			const res = await operatorFetch("/tickets/lookup", {
 				method: "POST",
 				body: JSON.stringify({ ids: Array.from(visibleIds) }),
 			});
@@ -290,7 +293,7 @@ export function TicketManager() {
 		enabled: true,
 		intervalMs: 5000,
 		onTick: () => {
-			refreshVisibleTicketStatuses();
+			refreshStatusesRef.current();
 		},
 		onError: () => {
 			// Silencioso
@@ -452,16 +455,10 @@ export function TicketManager() {
 			expiresIso = date.toISOString();
 		}
 
-		// Clave de idempotencia única para esta creación (evita duplicados por doble clic/reintentos)
-		const idempotencyKey = `create-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
 		setIsGenerating(true);
 		try {
 			const response = await operatorFetch("/tickets/batch", {
 				method: "POST",
-				headers: {
-					"Idempotency-Key": idempotencyKey,
-				},
 				body: JSON.stringify({
 					quantity: count,
 					batchLabel: label.trim() || undefined,
