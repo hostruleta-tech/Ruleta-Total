@@ -6,6 +6,7 @@ import type {
 	TicketSecretRow,
 	TicketStatus,
 } from "./types";
+import { effectiveStatus } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -39,6 +40,9 @@ function mapTicket(row: Row): Ticket {
 		reservedUntil:
 			row.reserved_until == null ? null : String(row.reserved_until),
 		redeemedAt: row.redeemed_at == null ? null : String(row.redeemed_at),
+		prizeId: row.prize_id == null ? null : Number(row.prize_id),
+		prizeName: row.prize_name == null ? null : String(row.prize_name),
+		rouletteId: row.roulette_id == null ? null : Number(row.roulette_id),
 	};
 }
 
@@ -123,7 +127,8 @@ export async function findTicketByTokenHash(
 ): Promise<Ticket | null> {
 	const result = await client.execute({
 		sql: `SELECT id, batch_id, status, created_at, expires_at,
-            reserved_at, reserved_until, redeemed_at
+            reserved_at, reserved_until, redeemed_at,
+            prize_id, prize_name, roulette_id
           FROM tickets WHERE token_hash = ?`,
 		args: [tokenHash],
 	});
@@ -296,4 +301,242 @@ export async function listBatches(
 		batches: result.rows.map(mapBatchSummary),
 		total: Number(countResult.rows[0]?.total ?? 0),
 	};
+}
+
+/**
+ * Valida un ticket por hash sin cambiar su estado.
+ * Devuelve el ticket con estado efectivo y si es válido para girar.
+ */
+export interface ValidationResult {
+	ticket: Ticket | null;
+	valid: boolean;
+	reason?: "not_found" | "expired" | "void" | "already_redeemed" | "reserved_other";
+}
+
+export async function validateTicket(
+	client: Client,
+	tokenHash: string,
+	now: Date = new Date(),
+): Promise<ValidationResult> {
+	const ticket = await findTicketByTokenHash(client, tokenHash);
+	if (!ticket) {
+		return { ticket: null, valid: false, reason: "not_found" };
+	}
+
+	const effective = effectiveStatus(ticket, now);
+
+	if (effective === "expired") {
+		return { ticket, valid: false, reason: "expired" };
+	}
+	if (effective === "void") {
+		return { ticket, valid: false, reason: "void" };
+	}
+	if (effective === "redeemed") {
+		return { ticket, valid: false, reason: "already_redeemed" };
+	}
+	if (effective === "reserved") {
+		// Si la reserva ya venció, se libera automáticamente
+		if (ticket.reservedUntil && Date.parse(ticket.reservedUntil) <= now.getTime()) {
+			await releaseExpiredReservation(client, ticket.id, now);
+			// Recargar con estado efectivo actualizado
+			const refreshed = await findTicketByTokenHash(client, tokenHash);
+			if (refreshed) {
+				return { ticket: refreshed, valid: true };
+			}
+		}
+		return { ticket, valid: false, reason: "reserved_other" };
+	}
+
+	return { ticket, valid: true };
+}
+
+/**
+ * Libera una reserva vencida (available).
+ * Se usa internamente cuando se detecta reserved_until <= now.
+ */
+async function releaseExpiredReservation(
+	client: Client,
+	ticketId: string,
+	now: Date,
+): Promise<void> {
+	await client.execute({
+		sql: `UPDATE tickets
+              SET status = 'available',
+                  reserved_at = NULL,
+                  reserved_until = NULL
+              WHERE id = ? AND status = 'reserved' AND reserved_until <= ?`,
+		args: [ticketId, now.toISOString()],
+	});
+}
+
+/**
+ * Reserva un ticket: available -> reserved.
+ * Atómico: solo tiene éxito si el ticket está disponible y no expirado.
+ */
+export interface ReserveResult {
+	success: boolean;
+	ticket: Ticket | null;
+	reason?:
+		| ValidationResult["reason"]
+		| "not_available"
+		| "already_reserved";
+}
+
+export async function reserveTicket(
+	client: Client,
+	tokenHash: string,
+	ttlMinutes: number = 5,
+	now: Date = new Date(),
+): Promise<ReserveResult> {
+	const validation = await validateTicket(client, tokenHash, now);
+	if (!validation.ticket) {
+		return { success: false, ticket: null, reason: validation.reason };
+	}
+	if (!validation.valid) {
+		return { success: false, ticket: validation.ticket, reason: validation.reason };
+	}
+
+	const reservedUntil = new Date(now.getTime() + ttlMinutes * 60 * 1000).toISOString();
+	const reservedAt = now.toISOString();
+
+	const result = await client.execute({
+		sql: `UPDATE tickets
+              SET status = 'reserved',
+                  reserved_at = ?,
+                  reserved_until = ?
+              WHERE id = ? AND status = 'available'`,
+		args: [reservedAt, reservedUntil, validation.ticket.id],
+	});
+
+	if (result.rowsAffected === 0) {
+		// Condición de carrera: otro proceso lo reservó/canjeó
+		const current = await findTicketByTokenHash(client, tokenHash);
+		return {
+			success: false,
+			ticket: current,
+			reason: current?.status === "reserved" ? "already_reserved" : "not_available",
+		};
+	}
+
+	const reserved = await findTicketByTokenHash(client, tokenHash);
+	return { success: true, ticket: reserved! };
+}
+
+/**
+ * Canjea un ticket reservado: reserved -> redeemed + guarda premio.
+ * Idempotente: si ya está redeemed, devuelve el ticket con el premio guardado.
+ */
+export interface RedeemResult {
+	success: boolean;
+	ticket: Ticket | null;
+	reason?: "not_found" | "not_reserved" | "reservation_expired" | "already_redeemed";
+}
+
+export interface PrizeInfo {
+	prizeId: number;
+	prizeName: string;
+	rouletteId: number;
+}
+
+export async function redeemTicket(
+	client: Client,
+	tokenHash: string,
+	prize: PrizeInfo,
+	now: Date = new Date(),
+): Promise<RedeemResult> {
+	const ticket = await findTicketByTokenHash(client, tokenHash);
+	if (!ticket) {
+		return { success: false, ticket: null, reason: "not_found" };
+	}
+
+	const effective = effectiveStatus(ticket, now);
+
+	// Idempotente: ya canjeado, devolver el premio guardado
+	if (effective === "redeemed") {
+		return { success: true, ticket };
+	}
+
+	if (effective !== "reserved") {
+		return { success: false, ticket, reason: "not_reserved" };
+	}
+
+	// Verificar si la reserva venció
+	if (ticket.reservedUntil && Date.parse(ticket.reservedUntil) <= now.getTime()) {
+		await releaseExpiredReservation(client, ticket.id, now);
+		return { success: false, ticket: await findTicketByTokenHash(client, tokenHash), reason: "reservation_expired" };
+	}
+
+	const redeemedAt = now.toISOString();
+
+	const result = await client.execute({
+		sql: `UPDATE tickets
+              SET status = 'redeemed',
+                  reserved_until = NULL,
+                  redeemed_at = ?,
+                  prize_id = ?,
+                  prize_name = ?,
+                  roulette_id = ?
+              WHERE id = ? AND status = 'reserved'`,
+		args: [redeemedAt, prize.prizeId, prize.prizeName, prize.rouletteId, ticket.id],
+	});
+
+	if (result.rowsAffected === 0) {
+		// Condición de carrera
+		const current = await findTicketByTokenHash(client, tokenHash);
+		return {
+			success: false,
+			ticket: current,
+			reason: current?.status === "redeemed" ? "already_redeemed" : "not_reserved",
+		};
+	}
+
+	const redeemed = await findTicketByTokenHash(client, tokenHash);
+	return { success: true, ticket: redeemed! };
+}
+
+/**
+ * Anula un ticket (void). Solo operador.
+ * Disponible desde available, reserved (no vencida), expired.
+ * No permite anular un redeemed.
+ */
+export interface VoidResult {
+	success: boolean;
+	ticket: Ticket | null;
+	reason?: "not_found" | "already_redeemed" | "cannot_void";
+}
+
+export async function voidTicket(
+	client: Client,
+	ticketId: string,
+	now: Date = new Date(),
+): Promise<VoidResult> {
+	const ticket = await getTicketById(client, ticketId);
+	if (!ticket) {
+		return { success: false, ticket: null, reason: "not_found" };
+	}
+
+	const effective = effectiveStatus(ticket, now);
+	if (effective === "redeemed") {
+		return { success: false, ticket, reason: "already_redeemed" };
+	}
+	if (effective === "void") {
+		return { success: true, ticket }; // idempotente
+	}
+
+	const result = await client.execute({
+		sql: `UPDATE tickets
+              SET status = 'void',
+                  reserved_at = NULL,
+                  reserved_until = NULL
+              WHERE id = ? AND status != 'redeemed'`,
+		args: [ticketId],
+	});
+
+	if (result.rowsAffected === 0) {
+		const current = await getTicketById(client, ticketId);
+		return { success: false, ticket: current, reason: "cannot_void" };
+	}
+
+	const voided = await getTicketById(client, ticketId);
+	return { success: true, ticket: voided! };
 }

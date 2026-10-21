@@ -11,6 +11,12 @@ import {
 	getTicketById,
 	listBatches,
 	listTickets,
+	validateTicket,
+	reserveTicket,
+	voidTicket,
+	type ReserveResult,
+	type ValidationResult,
+	type VoidResult,
 } from "./repository";
 import {
 	buildBatchQrZip,
@@ -18,6 +24,9 @@ import {
 	getBatchDetail,
 	renderTicketQr,
 } from "./service";
+import {
+	hashTicketToken,
+} from "./token";
 import {
 	isTicketStatus,
 	withEffectiveStatus,
@@ -95,15 +104,90 @@ function handleError(
 }
 
 /**
- * Rutas de administración de tickets.
+ * Rutas de tickets (fase 2).
  *
- * Todas requieren la contraseña de operador. La generación o el escaneo de
- * un QR no consumen el ticket; la reserva y el canje serán endpoints aparte
- * en la siguiente fase.
+ * Rutas públicas (sin contraseña de operador):
+ *   POST /api/tickets/validate   - Valida token, devuelve estado y si puede girar
+ *   POST /api/tickets/reserve    - Reserva ticket (available -> reserved, 5 min)
+ *
+ * El canje no es público: solo ocurre dentro de POST /api/spin, donde el
+ * servidor elige el premio. Así nadie puede fijar un premio arbitrario.
+ *
+ * Rutas de operador (requieren X-Operator-Password):
+ *   POST   /api/tickets           - Crea ticket individual
+ *   POST   /api/tickets/batch     - Crea lote
+ *   GET    /api/tickets           - Lista tickets
+ *   GET    /api/tickets/batches   - Lista lotes
+ *   GET    /api/tickets/batches/:id - Detalle lote
+ *   GET    /api/tickets/batches/:id/qr.zip - ZIP lote
+ *   GET    /api/tickets/:id/qr    - PNG individual
+ *   GET    /api/tickets/:id       - Metadatos ticket
+ *   POST   /api/tickets/:id/void  - Anula ticket (void)
  */
 export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 	const router = Router();
 
+	// ==================== RUTAS PÚBLICAS (sin contraseña) ====================
+
+	/**
+	 * POST /validate
+	 * Valida un token de ticket sin cambiar su estado.
+	 * Body: { token: string }
+	 * Respuesta: { valid: boolean, ticket: Ticket|null, reason?: string }
+	 */
+	router.post("/validate", async (req, res) => {
+		try {
+			const body = (req.body ?? {}) as { token?: unknown };
+			const token = typeof body.token === "string" ? body.token.trim() : "";
+			if (!token) {
+				return res.status(400).json({ message: "Token requerido." });
+			}
+
+			const client = await getClient();
+			const tokenHash = hashTicketToken(token);
+			const result: ValidationResult = await validateTicket(client, tokenHash);
+
+			// No exponer token_hash ni token_encrypted en la respuesta
+			const { ticket, valid, reason } = result;
+			return res.json({
+				valid,
+				ticket: ticket ? withEffectiveStatus(ticket) : null,
+				reason,
+			});
+		} catch (error) {
+			return handleError(res, "validate", error);
+		}
+	});
+
+	/**
+	 * POST /reserve
+	 * Reserva un ticket válido (available -> reserved por 5 min).
+	 * Body: { token: string }
+	 * Respuesta: { success: boolean, ticket: Ticket|null, reason?: string }
+	 */
+	router.post("/reserve", async (req, res) => {
+		try {
+			const body = (req.body ?? {}) as { token?: unknown };
+			const token = typeof body.token === "string" ? body.token.trim() : "";
+			if (!token) {
+				return res.status(400).json({ message: "Token requerido." });
+			}
+
+			const client = await getClient();
+			const tokenHash = hashTicketToken(token);
+			const result: ReserveResult = await reserveTicket(client, tokenHash, 5); // 5 min TTL
+
+			return res.json({
+				success: result.success,
+				ticket: result.ticket ? withEffectiveStatus(result.ticket) : null,
+				reason: result.reason,
+			});
+		} catch (error) {
+			return handleError(res, "reserve", error);
+		}
+	});
+
+	// ==================== RUTAS DE OPERADOR (requieren contraseña) ====================
 	router.use(requireOperatorPassword);
 
 	/** Crea un único ticket. */
@@ -261,6 +345,22 @@ export function createTicketsRouter(getClient: () => Promise<Client>): Router {
 			});
 		} catch (error) {
 			return handleError(res, "ticket-detail", error);
+		}
+	});
+
+	/** Anula un ticket (void). Solo operador. */
+	router.post("/:id/void", async (req, res) => {
+		try {
+			const client = await getClient();
+			const result: VoidResult = await voidTicket(client, req.params.id);
+
+			return res.json({
+				success: result.success,
+				ticket: result.ticket ? withEffectiveStatus(result.ticket) : null,
+				reason: result.reason,
+			});
+		} catch (error) {
+			return handleError(res, "void-ticket", error);
 		}
 	});
 

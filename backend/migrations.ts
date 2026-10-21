@@ -55,6 +55,21 @@ const MIGRATIONS: readonly Migration[] = [
 			"CREATE INDEX IF NOT EXISTS idx_tickets_expires_at ON tickets (expires_at)",
 		],
 	},
+	{
+		id: "003_ticket_prize_fields",
+		statements: [
+			`
+        ALTER TABLE tickets ADD COLUMN prize_id INTEGER
+      `,
+			`
+        ALTER TABLE tickets ADD COLUMN prize_name TEXT
+      `,
+			`
+        ALTER TABLE tickets ADD COLUMN roulette_id INTEGER
+      `,
+			"CREATE INDEX IF NOT EXISTS idx_tickets_reserved_until ON tickets (reserved_until)",
+		],
+	},
 ];
 
 /**

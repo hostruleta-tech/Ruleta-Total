@@ -31,6 +31,9 @@ export interface Ticket {
 	reservedAt: string | null;
 	reservedUntil: string | null;
 	redeemedAt: string | null;
+	prizeId: number | null;
+	prizeName: string | null;
+	rouletteId: number | null;
 }
 
 export interface TicketBatch {

@@ -147,6 +147,9 @@ export async function createTickets(
 		reservedAt: null,
 		reservedUntil: null,
 		redeemedAt: null,
+		prizeId: null,
+		prizeName: null,
+		rouletteId: null,
 	}));
 
 	const participationUrls = new Map<string, string>();
@@ -259,7 +262,7 @@ export async function buildBatchQrZip(
 	if (!folder) throw new Error("No se pudo crear el ZIP.");
 
 	const rows = [
-		"ticket_id,batch_id,status,created_at,expires_at",
+		"ticket_id,batch_id,status,created_at,expires_at,prize_id,prize_name,redeemed_at",
 	];
 
 	for (const secret of secrets) {
@@ -276,6 +279,9 @@ export async function buildBatchQrZip(
 				csvCell(effectiveStatus(secret.ticket)),
 				csvCell(secret.ticket.createdAt),
 				csvCell(secret.ticket.expiresAt),
+				csvCell(secret.ticket.prizeId == null ? "" : String(secret.ticket.prizeId)),
+				csvCell(secret.ticket.prizeName),
+				csvCell(secret.ticket.redeemedAt),
 			].join(","),
 		);
 	}

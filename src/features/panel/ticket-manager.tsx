@@ -1,4 +1,5 @@
 import {
+	Ban,
 	Eye,
 	Download,
 	FileArchive,
@@ -37,6 +38,9 @@ interface TicketDto {
 	reservedAt: string | null;
 	reservedUntil: string | null;
 	redeemedAt: string | null;
+	prizeId: number | null;
+	prizeName: string | null;
+	rouletteId: number | null;
 }
 
 interface TicketBatchDto {
@@ -327,8 +331,63 @@ export function TicketManager() {
 		}
 	};
 
+	const handleVoidTicket = async (ticketId: string) => {
+		const confirmed = window.confirm(
+			`¿Anular el ticket ${shortId(ticketId)}? Esta acción no se puede deshacer.`,
+		);
+		if (!confirmed) return;
+
+		setBusyKey(`void-${ticketId}`);
+		try {
+			const response = await operatorFetch(`/tickets/${ticketId}/void`, {
+				method: "POST",
+			});
+			if (!response) return;
+
+			const data = (await response.json()) as {
+				success?: boolean;
+				message?: string;
+				reason?: string;
+			};
+			if (!response.ok || !data.success) {
+				throw new Error(
+					data.message ??
+						(data.reason === "already_redeemed"
+							? "No se puede anular un ticket canjeado."
+							: `Error ${response.status}.`),
+				);
+			}
+
+			setResult((current) =>
+				current
+					? {
+							...current,
+							tickets: current.tickets.map((ticket) =>
+								ticket.id === ticketId
+									? { ...ticket, status: "void" as TicketStatus }
+									: ticket,
+							),
+						}
+					: current,
+			);
+			toast.success("Ticket anulado.");
+		} catch (error) {
+			toast.error(
+				translateMessage(
+					error instanceof Error ? error.message : undefined,
+					"No se pudo anular el ticket.",
+				),
+			);
+		} finally {
+			setBusyKey(null);
+		}
+	};
+
 	const statusByTicket = new Map(
 		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.status]),
+	);
+	const prizeByTicket = new Map(
+		(result?.tickets ?? []).map((ticket) => [ticket.id, ticket.prizeName]),
 	);
 
 	return (
@@ -590,6 +649,11 @@ export function TicketManager() {
 										>
 											{STATUS_LABELS[status]}
 										</span>
+										{status === "redeemed" && prizeByTicket.get(preview.id) && (
+											<p className="mt-1 text-center text-[10px] font-semibold text-slate-500">
+												Premio: {prizeByTicket.get(preview.id)}
+											</p>
+										)}
 										<BrandButton
 											variant="outline"
 											size="sm"
@@ -600,6 +664,20 @@ export function TicketManager() {
 											<Download className="h-3.5 w-3.5" />
 											{busyKey === `qr-${preview.id}` ? "..." : "PNG"}
 										</BrandButton>
+										{status !== "redeemed" && status !== "void" && (
+											<BrandButton
+												variant="ghost"
+												size="sm"
+												onClick={() => handleVoidTicket(preview.id)}
+												disabled={busyKey !== null}
+												className="mt-1 w-full"
+											>
+												<Ban className="h-3.5 w-3.5" />
+												{busyKey === `void-${preview.id}`
+													? "..."
+													: "Anular"}
+											</BrandButton>
+										)}
 									</div>
 								);
 							})}

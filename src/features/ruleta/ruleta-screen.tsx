@@ -190,6 +190,7 @@ const RouletteGame: React.FC<{
 
 interface SpinResponse {
   claimCode: string;
+  ticketId: string;
   prizeIndex: number;
   prize: string;
   prizeImageUrl?: string | null;
@@ -200,6 +201,42 @@ interface SpinResponse {
     imageUrl?: string | null;
   }[];
   rouletteId: number;
+}
+
+/** Estado del ticket leído desde el fragmento de la URL. */
+type TicketState =
+  | { kind: "checking" }
+  | { kind: "missing" }
+  | { kind: "valid"; ticketId: string }
+  | { kind: "invalid"; message: string };
+
+/** El token viaja en `#t=<token>`; nunca se envía en la URL al servidor. */
+function readTokenFromHash(): string | null {
+  const hash = window.location.hash.replace(/^#/, "");
+  if (!hash) return null;
+  const token = new URLSearchParams(hash).get("t");
+  const trimmed = token?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function ticketReasonMessage(reason?: string): string {
+  switch (reason) {
+    case "expired":
+      return "Este ticket ha expirado.";
+    case "void":
+      return "Este ticket fue anulado.";
+    case "already_redeemed":
+      return "Este ticket ya fue canjeado.";
+    case "reserved_other":
+      return "Este ticket está reservado en otra sesión. Espera unos minutos.";
+    case "already_reserved":
+    case "not_available":
+      return "El ticket se está usando en otra sesión. Intenta de nuevo en unos minutos.";
+    case "not_found":
+      return "El ticket no es válido.";
+    default:
+      return "No se pudo validar el ticket.";
+  }
 }
 
 export const RouletteViewHook: React.FC = () => {
@@ -213,7 +250,69 @@ export const RouletteViewHook: React.FC = () => {
   const [winnerColor, setWinnerColor] = useState<string | null>(null);
   const [winnerImage, setWinnerImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ticketToken, setTicketToken] = useState<string | null>(null);
+  const [ticketState, setTicketState] = useState<TicketState>({
+    kind: "checking",
+  });
+  const [hasSpun, setHasSpun] = useState(false);
   const isModalOpen = finalResult !== null;
+
+  // Lee el token del fragmento, lo borra de la barra de direcciones y lo
+  // valida contra el servidor sin consumir el ticket.
+  useEffect(() => {
+    const token = readTokenFromHash();
+    if (!token) {
+      setTicketState({ kind: "missing" });
+      return;
+    }
+
+    setTicketToken(token);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+
+    let cancelled = false;
+
+    const validate = async () => {
+      try {
+        const response = await fetch(`${API_URL}/tickets/validate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          valid?: boolean;
+          ticket?: { id?: string } | null;
+          reason?: string;
+        };
+
+        if (cancelled) return;
+
+        if (response.ok && data.valid && data.ticket?.id) {
+          setTicketState({ kind: "valid", ticketId: String(data.ticket.id) });
+        } else {
+          setTicketState({
+            kind: "invalid",
+            message: ticketReasonMessage(data.reason),
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setTicketState({
+            kind: "invalid",
+            message: "No se pudo validar el ticket. Revisa tu conexión.",
+          });
+        }
+      }
+    };
+
+    validate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const controlsRef = useRef<RouletteControls | null>(null);
   const handleControlsReady = useCallback((controls: RouletteControls) => {
@@ -253,7 +352,18 @@ export const RouletteViewHook: React.FC = () => {
   }, [isModalOpen]);
 
   const handleSpin = async () => {
-    if (isSpinning || isModalOpen || !rouletteItems) return;
+    if (isSpinning || isModalOpen || !rouletteItems || hasSpun) return;
+
+    if (ticketState.kind !== "valid" || !ticketToken) {
+      setError(
+        ticketState.kind === "missing"
+          ? "Escanea el QR de tu ticket para poder girar."
+          : ticketState.kind === "invalid"
+            ? ticketState.message
+            : "Validando tu ticket, espera un momento.",
+      );
+      return;
+    }
 
     setError(null);
     setIsSpinning(true);
@@ -263,13 +373,24 @@ export const RouletteViewHook: React.FC = () => {
       const response = await fetch(`${API_URL}/spin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: ticketToken }),
       });
 
       if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(
-          (result as { message?: string }).message || "Error al girar la ruleta",
-        );
+        const result = (await response.json().catch(() => ({}))) as {
+          message?: string;
+          reason?: string;
+        };
+
+        // Si el ticket dejó de ser válido, se refleja en la tarjeta.
+        if (result.reason) {
+          setTicketState({
+            kind: "invalid",
+            message: ticketReasonMessage(result.reason),
+          });
+        }
+
+        throw new Error(result.message || "Error al girar la ruleta");
       }
 
       const spinData: SpinResponse = await response.json();
@@ -283,6 +404,7 @@ export const RouletteViewHook: React.FC = () => {
       setRouletteItems(formattedPrizes);
 
       setClaimCode(spinData.claimCode);
+      setHasSpun(true);
 
       const winningPrize = spinData.prizes[spinData.prizeIndex];
       setWinnerColor(winningPrize?.backgroundColor ?? null);
@@ -316,6 +438,8 @@ export const RouletteViewHook: React.FC = () => {
     );
     soundManager.playWin();
   };
+
+  const canSpin = ticketState.kind === "valid" && !hasSpun;
 
   return (
     <div
@@ -420,7 +544,7 @@ export const RouletteViewHook: React.FC = () => {
             {/* BOTÓN GIRAR RULETA */}
             <button
               onClick={handleSpin}
-              disabled={isSpinning || !rouletteItems}
+              disabled={isSpinning || !rouletteItems || !canSpin}
               type="button"
               aria-label={isSpinning ? "Girando ruleta" : "Girar Ruleta"}
               className="w-[90%] max-w-[340px] flex items-center justify-center gap-[14px] rounded-full px-5 py-3 text-white font-black uppercase tracking-wider"
@@ -432,8 +556,8 @@ export const RouletteViewHook: React.FC = () => {
                 boxShadow:
                   "0 8px 18px rgba(227, 24, 33, 0.42), inset 0 1px 1px rgba(255, 255, 255, 0.45)",
                 transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                opacity: isSpinning ? 0.8 : 1,
-                cursor: isSpinning ? "not-allowed" : "pointer",
+                opacity: isSpinning || !canSpin ? 0.6 : 1,
+                cursor: isSpinning || !canSpin ? "not-allowed" : "pointer",
               }}
               onMouseDown={(e) => {
                 if (!isSpinning) {
@@ -471,7 +595,13 @@ export const RouletteViewHook: React.FC = () => {
               >
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
               </svg>
-              <span>{isSpinning ? "GIRANDO..." : "GIRAR RULETA"}</span>
+              <span>
+                {isSpinning
+                  ? "GIRANDO..."
+                  : hasSpun
+                    ? "TICKET CANJEADO"
+                    : "GIRAR RULETA"}
+              </span>
             </button>
 
             {/* Mensaje de error */}
@@ -524,7 +654,11 @@ export const RouletteViewHook: React.FC = () => {
                   className="text-[13px] font-extrabold leading-snug"
                   style={{ color: "#0f393f" }}
                 >
-                  {finalResult ? finalResult : "Tu premio aparecerá aquí"}
+                  {finalResult
+                    ? finalResult
+                    : ticketState.kind === "valid"
+                      ? "Ticket válido"
+                      : "Escanea tu ticket"}
                 </h4>
                 <p
                   className="text-[11px] font-semibold mt-0.5"
@@ -532,7 +666,13 @@ export const RouletteViewHook: React.FC = () => {
                 >
                   {finalResult
                     ? `¡Felicidades! Código: ${claimCode}`
-                    : "¡Buena suerte!"}
+                    : ticketState.kind === "valid"
+                      ? "Pulsa GIRAR RULETA para participar."
+                      : ticketState.kind === "checking"
+                        ? "Validando ticket..."
+                        : ticketState.kind === "missing"
+                          ? "Necesitas el QR de tu ticket para girar."
+                          : ticketState.message}
                 </p>
               </div>
             </section>

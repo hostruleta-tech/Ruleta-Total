@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import express, { Router } from "express";
 import {
   createRoulette,
@@ -14,6 +13,14 @@ import {
 } from "./database";
 import { requireOperatorPassword } from "./tickets/auth";
 import { createTicketsRouter } from "./tickets/router";
+import { hashTicketToken } from "./tickets/token";
+import {
+  reserveTicket,
+  redeemTicket,
+  validateTicket,
+  type PrizeInfo,
+} from "./tickets/repository";
+import { withEffectiveStatus } from "./tickets/types";
 
 const router = Router();
 
@@ -127,11 +134,19 @@ function pickWeightedIndex(prizes: Prize[]): number {
 
 /**
  * POST /api-ruleta/spin
- * El participante (teléfono) solicita un giro.
- * El servidor sortea con la plantilla activa y devuelve el premio elegido.
+ * El participante escanea un QR, valida su token, reserva el ticket,
+ * el servidor sortea con la plantilla activa, canjea el ticket y
+ * devuelve el premio junto con el ID del ticket como código de reclamación.
+ * Body: { token: string }
  */
 router.post("/spin", async (req, res) => {
   try {
+    const body = (req.body ?? {}) as { token?: unknown };
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({ message: "Token de ticket requerido." });
+    }
+
     const active = await getActiveRouletteWithPrizes();
     if (!active || !active.prizes || active.prizes.length === 0) {
       return res
@@ -139,14 +154,62 @@ router.post("/spin", async (req, res) => {
         .json({ message: "No hay plantilla activa con premios." });
     }
 
+    const tokenHash = hashTicketToken(token);
+    const client = await getDb();
+
+    // 1. Validar ticket
+    const validation = await validateTicket(client, tokenHash);
+    if (!validation.valid || !validation.ticket) {
+      const statusCode = validation.reason === "not_found" ? 404 : 410;
+      return res.status(statusCode).json({
+        message: validation.reason === "not_found"
+          ? "Ticket no encontrado."
+          : validation.reason === "expired"
+          ? "Ticket expirado."
+          : validation.reason === "void"
+          ? "Ticket anulado."
+          : validation.reason === "already_redeemed"
+          ? "Ticket ya canjeado."
+          : "Ticket reservado por otra sesión.",
+        reason: validation.reason,
+        ticket: validation.ticket ? withEffectiveStatus(validation.ticket) : null,
+      });
+    }
+
+    // 2. Reservar ticket (5 min TTL)
+    const reserveResult = await reserveTicket(client, tokenHash, 5);
+    if (!reserveResult.success || !reserveResult.ticket) {
+      return res.status(409).json({
+        message: "No se pudo reservar el ticket.",
+        reason: reserveResult.reason,
+        ticket: reserveResult.ticket ? withEffectiveStatus(reserveResult.ticket) : null,
+      });
+    }
+
+    // 3. Sortear premio
     const winnerIndex = pickWeightedIndex(active.prizes);
     const prize = active.prizes[winnerIndex];
 
-    // Generar un código de reclamo simple (para fase futura de validación)
-    const claimCode = randomUUID().slice(0, 8).toUpperCase();
+    // 4. Canjear ticket con el premio
+    const prizeInfo: PrizeInfo = {
+      prizeId: prize.id ?? 0,
+      prizeName: prize.name,
+      rouletteId: active.id,
+    };
+    const redeemResult = await redeemTicket(client, tokenHash, prizeInfo);
+    if (!redeemResult.success || !redeemResult.ticket) {
+      // Si falla el canje, la reserva expirará en 5 min y se liberará sola
+      return res.status(500).json({
+        message: "Error al canjear el ticket.",
+        reason: redeemResult.reason,
+        ticket: redeemResult.ticket ? withEffectiveStatus(redeemResult.ticket) : null,
+      });
+    }
 
+    // 5. Responder con el premio y el ticket ID como claimCode
     return res.json({
-      claimCode,
+      claimCode: redeemResult.ticket.id.slice(0, 8).toUpperCase(),
+      ticketId: redeemResult.ticket.id,
       prizeIndex: winnerIndex,
       prize: prize.name,
       prizeImageUrl: prize.imageUrl ?? null,
