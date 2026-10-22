@@ -15,7 +15,6 @@ import {
   calculateLabelPosition,
   calculateSegmentAngle,
   degreesToCanvasRadians,
-  getSegmentIndexAtPointer,
 } from "./utils";
 
 /** Texto oscuro de marca para fondos claros (evita el negro puro). */
@@ -183,8 +182,12 @@ const truncateText = (
 };
 
 /**
- * Dibuja el nombre del premio. Si vertical=true (solo texto, sin imagen),
- * renderiza cada carácter apilado verticalmente. Si false, horizontal.
+ * Dibuja el nombre del premio.
+ * - Si radial=true (premio SIN imagen): distribuye los caracteres a lo largo
+ *   del radio del sector (desde zona interior hacia el borde exterior),
+ *   manteniendo cada carácter con orientación horizontal (legible).
+ * - Si radial=false (premio CON imagen): render horizontal centrado
+ *   (wrap + truncate) tal como estaba.
  */
 const drawPieLabel = ({
   context,
@@ -195,13 +198,75 @@ const drawPieLabel = ({
   style,
   labelOffset,
   maxLines,
+  radial = false,
+  // Solo usados en modo horizontal:
   imageAnchor,
   imgOffset,
   midDeg,
-  vertical = false,
 }: DrawPieLabel): void => {
-  // Siempre posicionar el texto en el centro del sector (labelOffset)
-  // independientemente de si hay imagen o no
+  const hasName = Boolean(pie.name && pie.name.trim());
+  if (!hasName) return;
+
+  // --- Parámetros comunes ---
+  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
+  const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
+
+  // Ángulo central del sector en radianes de canvas
+  const midRad = degreesToCanvasRadians(segmentStartAngle + anglePerSegment / 2);
+  const dirX = Math.cos(midRad);
+  const dirY = Math.sin(midRad);
+
+  // --- MODO RADIAL (solo texto, sin imagen) ---
+  if (radial) {
+    // Parámetros solo usados en modo horizontal; silenciados aquí
+    void imageAnchor;
+    void imgOffset;
+    void midDeg;
+    const chars = [...pie.name.trim()];
+    if (chars.length === 0) return;
+
+    // Zona radial disponible: desde fuera del logo central (≈0.30R) hasta antes del borde (≈0.92R)
+    const innerRadius = geometry.radius * 0.30;
+    const outerRadius = geometry.radius * 0.92;
+    const radialLength = outerRadius - innerRadius;
+
+    // Ajustar fontSize y paso para que la frase completa quepa en radialLength
+    let fontSize = baseSize;
+    let step = fontSize * 1.15; // espaciado entre caracteres (≈line-height)
+
+    // Primero reducimos fontSize hasta que n * paso <= radialLength
+    while (fontSize > 8 && chars.length * step > radialLength) {
+      fontSize--;
+      step = fontSize * 1.15;
+    }
+    // Si aún no cabe, compactamos el paso (espaciado más denso)
+    if (chars.length * step > radialLength) {
+      step = radialLength / chars.length;
+    }
+
+    context.save();
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillStyle = pie.color;
+    context.font = withFontSize(style.label.font, fontSize);
+
+    // Centro del primer carácter a half-step desde innerRadius
+    let distFromCenter = innerRadius + step * 0.5;
+
+    chars.forEach((char) => {
+      if (distFromCenter > outerRadius) return; // seguridad
+      const charX = geometry.center.x + dirX * distFromCenter;
+      const charY = geometry.center.y + dirY * distFromCenter;
+      context.fillText(char, charX, charY);
+      distFromCenter += step;
+    });
+
+    context.restore();
+    return;
+  }
+
+  // --- MODO HORIZONTAL (original): para premios con imagen ---
+  // Posición del centro del label (mismo cálculo que antes)
   const pos = calculateLabelPosition({
     geometry,
     segmentStartAngle,
@@ -217,9 +282,6 @@ const drawPieLabel = ({
   const chordWidth = 2 * labelRadius * Math.sin(chordHalfAngle) * 0.92;
   const maxWidth = Math.max(16, chordWidth);
 
-  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
-  const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
-
   context.save();
   // Texto SIEMPRE horizontal (sin rotación)
   context.setTransform(1, 0, 0, 1, labelX, labelY);
@@ -228,35 +290,6 @@ const drawPieLabel = ({
   context.fillStyle = pie.color;
   context.font = style.label.font;
 
-  // RENDER VERTICAL: solo para premios sin imagen
-  if (vertical) {
-    const chars = [...pie.name.trim()];
-    if (chars.length === 0) {
-      context.restore();
-      return;
-    }
-
-    let fontSize = baseSize;
-    const lineHeight = fontSize * 1.15;
-
-    // Reducir tamaño hasta que la altura total quepa en el ancho disponible (chordWidth)
-    while (fontSize > 9 && chars.length * fontSize * 1.15 > chordWidth) {
-      fontSize = Math.max(9, fontSize - 1);
-    }
-
-    context.font = withFontSize(style.label.font, fontSize);
-    const finalLineHeight = fontSize * 1.15;
-    const firstOffset = -((chars.length - 1) * finalLineHeight) / 2;
-
-    chars.forEach((char, idx) => {
-      context.fillText(char, 0, firstOffset + idx * finalLineHeight);
-    });
-
-    context.restore();
-    return;
-  }
-
-  // RENDER HORIZONTAL (original): para premios con imagen
   let fontSize = baseSize;
   let lines = wrapText(context, pie.name, maxWidth, maxLines);
 
@@ -392,8 +425,8 @@ export interface DrawPieLabel {
   imgOffset?: number;
   /** Ángulo central del sector en radianes de canvas. */
   midDeg?: number;
-  /** Renderizar texto en vertical (solo texto, sin imagen). */
-  vertical?: boolean;
+  /** Renderizar texto siguiendo el radio del sector (solo texto, sin imagen). */
+  radial?: boolean;
 }
 
 export interface DrawPie {
@@ -700,7 +733,7 @@ export const drawRoulette = ({
       imageAnchor,
       imgOffset: params.imgOffset,
       midDeg: params.midDeg,
-      vertical: false,
+      radial: !hasImage,
     });
   });
 
@@ -827,12 +860,12 @@ export const drawRouletteContent = ({
       imageAnchor: null,
       imgOffset: style.label.offset,
       midDeg: 0,
-      vertical: false,
+      radial: !hasImage,
     });
   });
 
   // PASO 3: Dibujar todas las imágenes (ENCIMA de los textos)
-  resolvedPieList.forEach((pie, index) => {
+  resolvedPieList.forEach((pie) => {
     if (pie.image) {
       const imageOpts = getImageDrawOptions(pie.labelMode, true, pie.hasName);
       drawPieImage({
@@ -883,103 +916,6 @@ export const drawRouletteContent = ({
   context.stroke();
 };
 
-/**
- * Dibuja el nombre del premio actual (bajo el puntero) en vertical,
- * fijo en la pantalla (no gira con la ruleta), desde el centro hacia
- * el borde exterior en la dirección del puntero.
- * Cada carácter se posiciona individualmente a lo largo del radio.
- */
-export const drawFixedVerticalLabel = ({
-  context,
-  geometry,
-  rouletteItemList,
-  totalRotation,
-  startAngle,
-  pointerAngle,
-  style,
-  innerMargin = 0.18,
-  outerMargin = 0.08,
-}: {
-  context: CanvasRenderingContext2D;
-  geometry: { center: { x: number; y: number }; radius: number };
-  rouletteItemList: { name: string; image?: string | null; labelMode?: string | null }[];
-  totalRotation: number;
-  startAngle: number;
-  pointerAngle: number;
-  style: { label: { font: string; defaultColor: string } };
-  /** Margen desde el centro (fracción del radio). */
-  innerMargin?: number;
-  /** Margen desde el borde exterior (fracción del radio). */
-  outerMargin?: number;
-}) => {
-  const itemCount = rouletteItemList.length;
-  if (itemCount === 0) return;
-
-  // Qué sector está bajo el puntero
-  const index = getSegmentIndexAtPointer({
-    totalRotation,
-    itemCount,
-    startAngle,
-    pointerAngle,
-  });
-  if (index < 0) return;
-
-  const prize = rouletteItemList[index];
-  if (!prize.name || !prize.name.trim()) return;
-
-  // Solo mostrar si NO tiene imagen
-  if (prize.image) return;
-
-  const { center, radius } = geometry;
-  const innerRadius = radius * innerMargin;
-  const outerRadius = radius * (1 - outerMargin);
-  const availableHeight = outerRadius - innerRadius;
-
-  // Ángulo del puntero en radianes de canvas (90° = arriba)
-  const pointerRad = degreesToCanvasRadians(pointerAngle);
-
-  // Texto en vertical (caracteres apilados)
-  const chars = [...prize.name.trim()];
-  if (chars.length === 0) return;
-
-  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
-  const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
-
-  let fontSize = baseSize;
-  const lineHeight = fontSize * 1.15;
-
-  // Ajustar tamaño para que quepa en la altura disponible
-  while (fontSize > 10 && chars.length * fontSize * 1.15 > availableHeight) {
-    fontSize = Math.max(10, fontSize - 1);
-  }
-
-  const finalLineHeight = fontSize * 1.15;
-  const totalHeight = chars.length * finalLineHeight;
-  const startY = innerRadius + (availableHeight - totalHeight) / 2;
-
-  context.save();
-  // NO rotar el contexto. En su lugar, calcular la posición absoluta de cada carácter.
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillStyle = style.label.defaultColor || "#FFFFFF";
-  context.font = withFontSize(style.label.font, fontSize);
-
-  // Vector unitario en la dirección del puntero
-  const dirX = Math.cos(pointerRad);
-  const dirY = Math.sin(pointerRad);
-
-  chars.forEach((char, idx) => {
-    // Distancia desde el centro para este carácter
-    const distFromCenter = startY + idx * finalLineHeight + finalLineHeight / 2;
-    // Posición absoluta en el canvas
-    const charX = center.x + dirX * distFromCenter;
-    const charY = center.y + dirY * distFromCenter;
-    context.fillText(char, charX, charY);
-  });
-
-  context.restore();
-};
-
 export const drawCanvas = ({
   rouletteItemList,
   mergedOptions,
@@ -999,19 +935,6 @@ export const drawCanvas = ({
     style: mergedOptions.style,
     context,
     geometry,
-  });
-
-  // Texto vertical fijo para premios sin imagen (bajo el puntero)
-  drawFixedVerticalLabel({
-    context,
-    geometry,
-    rouletteItemList,
-    totalRotation: rouletteRef.current.totalRotation,
-    startAngle: mergedOptions.determineAngle,
-    pointerAngle: mergedOptions.determineAngle,
-    style: mergedOptions.style,
-    innerMargin: 0.18,
-    outerMargin: 0.08,
   });
 
   if (mergedOptions.showArrow) {
