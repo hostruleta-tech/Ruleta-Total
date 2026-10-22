@@ -253,7 +253,7 @@ const drawPieLabel = ({
     // Rotación del bloque: solidaria al sector (la palabra gira con la rueda).
     // atan2(dirX, -dirY) da 0 cuando el sector está arriba (dir=(0,-1)).
     // El bloque rota con la rueda; si queda de cabeza al pasar por abajo, es correcto.
-    const blockRotation = Math.atan2(dirX, -dirY);
+    const blockRotation = Math.atan2(dirX, -dirY) - Math.PI / 2;
 
     // Centro del primer carácter a half-step desde innerRadius
     let distFromCenter = innerRadius + step * 0.5;
