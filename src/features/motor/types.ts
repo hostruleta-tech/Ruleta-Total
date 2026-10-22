@@ -88,5 +88,4 @@ export interface StyleOption {
 export interface RouletteCanvas {
   size: number;
   canvasRef: React.RefObject<HTMLCanvasElement>;
-  labelCanvasRef: React.RefObject<HTMLCanvasElement>;
 }

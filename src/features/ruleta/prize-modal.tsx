@@ -1,6 +1,32 @@
 import React, { useEffect, useRef } from "react";
 import Confetti from "react-confetti";
 
+const MODAL_BG = "#eef2f5";
+
+/** Luminancia relativa sRGB */
+const lum = (hex: string): number => {
+  const c = hex.replace("#", "");
+  const [r, g, b] = c.length === 3
+    ? c.split("").map((x) => Number.parseInt(x + x, 16))
+    : [Number.parseInt(c.slice(0, 2), 16), Number.parseInt(c.slice(2, 4), 16), Number.parseInt(c.slice(4, 6), 16)];
+  const ch = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+};
+
+const bgLum = lum(MODAL_BG);
+
+/** Devuelve un color legible contra el fondo del modal */
+const readableColor = (color: string | null): string => {
+  if (!color) return "#005f63";
+  try {
+    const cLum = lum(color);
+    const ratio = (Math.max(bgLum, cLum) + 0.05) / (Math.min(bgLum, cLum) + 0.05);
+    return ratio >= 3 ? color : "#005f63";
+  } catch {
+    return "#005f63";
+  }
+};
+
 interface PrizeModalProps {
 	prize: string;
 	prizeColor: string | null;
@@ -81,7 +107,7 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 				{showName && (
 					<p
 						className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
-						style={{ color: prizeColor ?? "#005f63" }}
+						style={{ color: readableColor(prizeColor) }}
 					>
 						{prize}
 					</p>
@@ -91,7 +117,7 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 				{!showName && !prizeImage && (
 					<p
 						className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
-						style={{ color: prizeColor ?? "#005f63" }}
+						style={{ color: readableColor(prizeColor) }}
 					>
 						{prize}
 					</p>

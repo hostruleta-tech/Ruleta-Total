@@ -652,7 +652,6 @@ interface DrawCanvas {
   rouletteItemList: RouletteItem[];
   mergedOptions: DefaultRouletteOptions;
   context: CanvasRenderingContext2D;
-  labelContext: CanvasRenderingContext2D;
   geometry: {
     center: {
       x: number;
@@ -713,15 +712,36 @@ export const drawRouletteContent = ({
     });
   }
 
-  // PASO 2: Dibujar todas las imágenes y capturar sus anclas + params de rotación
-  const imageAnchors = new Map<number, ImageAnchor | null>();
-  const imageParams = new Map<number, { imgOffset: number; midDeg: number }>();
+  // PASO 2: Dibujar todos los textos (encima de sectores, debajo de imágenes)
+  resolvedPieList.forEach((pie) => {
+    if (!shouldDrawLabel(pie.labelMode, Boolean(pie.image), pie.hasName)) {
+      return;
+    }
+    const hasImage = Boolean(pie.image);
+    const labelOffset = hasImage
+      ? Math.min(style.label.offset, 0.58)
+      : style.label.offset;
+    const labelMaxLines = hasImage ? 2 : 1;
+    drawPieLabel({
+      context,
+      geometry,
+      pie,
+      segmentStartAngle: pie.segmentStartAngle,
+      anglePerSegment,
+      style,
+      labelOffset,
+      maxLines: labelMaxLines,
+      imageAnchor: null,
+      imgOffset: style.label.offset,
+      midDeg: 0,
+    });
+  });
+
+  // PASO 3: Dibujar todas las imágenes (ENCIMA de los textos)
   resolvedPieList.forEach((pie, index) => {
     if (pie.image) {
       const imageOpts = getImageDrawOptions(pie.labelMode, true, pie.hasName);
-      const imgOffset = imageOpts.offset;
-      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
-      const anchor = drawPieImage({
+      drawPieImage({
         context,
         geometry,
         pie,
@@ -730,12 +750,6 @@ export const drawRouletteContent = ({
         style,
         imageOptions: imageOpts,
       });
-      imageAnchors.set(index, anchor);
-      imageParams.set(index, { imgOffset, midDeg });
-    } else {
-      imageAnchors.set(index, null);
-      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
-      imageParams.set(index, { imgOffset: style.label.offset, midDeg });
     }
   });
 
@@ -775,76 +789,14 @@ export const drawRouletteContent = ({
   context.stroke();
 };
 
-// Dibuja solo los textos en el canvas de etiquetas
-export const drawRouletteLabels = ({
-  initialAngleOffset,
-  context,
-  startAngle,
-  geometry,
-  pieList,
-  style,
-}: DrawRoulette) => {
-  const itemCount = pieList.length;
-  if (itemCount === 0) return;
-
-  const anglePerSegment = calculateSegmentAngle(itemCount);
-  let segmentEndAngle = (initialAngleOffset % 360) + startAngle;
-
-  const resolvedPieList = pieList.map((pie, index) => {
-    const theme = style.pie.theme[index % style.pie.theme.length];
-    const bg = pie.bg || theme.bg;
-
-    const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
-    segmentEndAngle = segmentStartAngle;
-
-    const hasName = Boolean(pie.name && pie.name.trim());
-
-    return {
-      name: pie.name,
-      bg,
-      image: pie.image ?? null,
-      labelMode: pie.labelMode ?? "both",
-      hasName,
-      color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
-      segmentStartAngle,
-    };
-  });
-
-  // Dibujar todos los textos (ya no necesitan anclas de imagen)
-  resolvedPieList.forEach((pie) => {
-    if (!shouldDrawLabel(pie.labelMode, Boolean(pie.image), pie.hasName)) {
-      return;
-    }
-    const hasImage = Boolean(pie.image);
-    const labelOffset = hasImage
-      ? Math.min(style.label.offset, 0.58)
-      : style.label.offset;
-    const labelMaxLines = hasImage ? 2 : 1;
-    drawPieLabel({
-      context,
-      geometry,
-      pie,
-      segmentStartAngle: pie.segmentStartAngle,
-      anglePerSegment,
-      style,
-      labelOffset,
-      maxLines: labelMaxLines,
-      imageAnchor: null,
-      imgOffset: style.label.offset,
-      midDeg: 0,
-    });
-  });
-};
-
 export const drawCanvas = ({
   rouletteItemList,
   mergedOptions,
   context,
-  labelContext,
   geometry,
   rouletteRef,
 }: DrawCanvas) => {
-  // Canvas principal: fondo + sectores + imágenes
+  // Canvas único: fondo + sectores + textos + imágenes + flecha
   context.beginPath();
   context.fillStyle = mergedOptions.style.canvas.bg;
   context.fillRect(0, 0, geometry.radius * 2, geometry.radius * 2);
@@ -855,18 +807,6 @@ export const drawCanvas = ({
     startAngle: mergedOptions.determineAngle,
     style: mergedOptions.style,
     context,
-    geometry,
-  });
-
-  // Canvas de etiquetas: solo textos (fondo transparente)
-  labelContext.clearRect(0, 0, geometry.radius * 2, geometry.radius * 2);
-
-  drawRouletteLabels({
-    pieList: rouletteItemList,
-    initialAngleOffset: rouletteRef.current.totalRotation,
-    startAngle: mergedOptions.determineAngle,
-    style: mergedOptions.style,
-    context: labelContext,
     geometry,
   });
 
