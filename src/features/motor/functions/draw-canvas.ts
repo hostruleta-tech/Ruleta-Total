@@ -243,7 +243,7 @@ const drawPieLabel = ({
     const maxStep = radialLength / chars.length;
 
     // Tamaño más grande posible: ni del objetivo, ni del sector, ni del que permita la frase completa
-    let fontSize = Math.min(baseSize * 1.3, maxFontByChord, maxStep / CHAR_SPACING);
+    let fontSize = Math.min(baseSize * 1.6, maxFontByChord, maxStep / CHAR_SPACING);
     let step = fontSize * CHAR_SPACING;
 
     // Redondeo de seguridad: si por decimales aún sobra, compactar exacto
