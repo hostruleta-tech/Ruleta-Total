@@ -8,6 +8,8 @@ export interface SeedPrize {
 	name: string;
 	backgroundColor: string;
 	probability: number;
+	/** true = casilla "Inténtalo de nuevo" (no consume el ticket). */
+	isSpinAgain?: boolean;
 }
 
 export interface SeedTemplate {
@@ -28,6 +30,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
 				name: "Inténtalo de nuevo",
 				backgroundColor: "#DC143C",
 				probability: 65,
+				isSpinAgain: true,
 			},
 		],
 	},

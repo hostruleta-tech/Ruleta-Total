@@ -22,6 +22,7 @@ interface AnimateRouletteParams {
 	rouletteItemList: RouletteItem[];
 	mergedOptions: DefaultRouletteOptions;
 	context: CanvasRenderingContext2D;
+	labelContext: CanvasRenderingContext2D;
 	status: "running" | "ending";
 	geometry: Geometry;
 	rouletteRef: React.MutableRefObject<{
@@ -38,6 +39,7 @@ export const animateRoulette = ({
 	rouletteItemList,
 	mergedOptions,
 	context,
+	labelContext,
 	status,
 	geometry,
 	rouletteRef,
@@ -121,6 +123,7 @@ export const animateRoulette = ({
 				rouletteItemList,
 				mergedOptions,
 				context,
+				labelContext,
 				geometry,
 				rouletteRef,
 			});
@@ -150,6 +153,7 @@ export const animateRoulette = ({
 			rouletteItemList,
 			mergedOptions,
 			context,
+			labelContext,
 			geometry,
 			rouletteRef,
 		});

@@ -57,6 +57,7 @@ export const useRoulette = ({
   }, [options]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const labelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rouletteRef = useRef<{
     speed: number;
     totalRotation: number;
@@ -160,10 +161,12 @@ export const useRoulette = ({
     const render = () => {
       if (cancelled) return;
       const { context } = setupCanvas(canvasRef.current);
+      const { context: labelContext } = setupCanvas(labelCanvasRef.current);
       drawCanvas({
         rouletteItemList: items,
         mergedOptions,
         context,
+        labelContext,
         geometry,
         rouletteRef,
       });
@@ -208,10 +211,12 @@ export const useRoulette = ({
     }
 
     const { context } = setupCanvas(canvasRef.current);
+    const { context: labelContext } = setupCanvas(labelCanvasRef.current);
     const cancelAnimation = animateRoulette({
       rouletteItemList: itemsRef.current,
       mergedOptions: mergedOptionsRef.current,
       context,
+      labelContext,
       status,
       geometry: geometryRef.current,
       rouletteRef,
@@ -232,6 +237,7 @@ export const useRoulette = ({
     roulette: {
       size: mergedOptions.size,
       canvasRef: canvasRef as React.RefObject<HTMLCanvasElement>,
+      labelCanvasRef: labelCanvasRef as React.RefObject<HTMLCanvasElement>,
     },
 
     result: resultRef.current,

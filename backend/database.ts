@@ -17,6 +17,11 @@ export interface Prize {
 	imageUrl?: string | null;
 	/** Dónde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
 	labelMode?: LabelMode | null;
+	/**
+	 * Casilla "Inténtalo de nuevo": al caer en ella no se consume el ticket y
+	 * el participante puede volver a girar.
+	 */
+	isSpinAgain?: boolean;
 }
 
 export interface RouletteTemplate {
@@ -66,6 +71,7 @@ function mapPrize(row: Row): Prize {
 		image,
 		imageUrl: image ? `/api/prizes/${id}/image` : null,
 		labelMode: (row.label_mode as LabelMode | null) ?? "both",
+		isSpinAgain: Number(row.is_spin_again) === 1,
 	};
 }
 
@@ -127,6 +133,18 @@ async function ensureInitialized(): Promise<Client> {
 			console.log("[db] Columna 'label_mode' agregada a la tabla prizes.");
 		}
 
+		// Migración: columna is_spin_again para casillas "Inténtalo de nuevo".
+		const spinAgainColumns = await client.execute("PRAGMA table_info(prizes)");
+		const hasSpinAgainColumn = spinAgainColumns.rows.some(
+			(column) => column.name === "is_spin_again",
+		);
+		if (!hasSpinAgainColumn) {
+			await client.execute(
+				"ALTER TABLE prizes ADD COLUMN is_spin_again BOOLEAN NOT NULL DEFAULT 0",
+			);
+			console.log("[db] Columna 'is_spin_again' agregada a la tabla prizes.");
+		}
+
 		// Migraciones del sistema de tickets (idempotentes).
 		const appliedMigrations = await runMigrations(client);
 		for (const id of appliedMigrations) {
@@ -150,13 +168,14 @@ async function ensureInitialized(): Promise<Client> {
 				if (template.prizes.length > 0) {
 					await client.batch(
 						template.prizes.map((prize) => ({
-							sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
+							sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, is_spin_again) VALUES (?, ?, ?, ?, ?, ?)",
 							args: [
 								rouletteId,
 								prize.name,
 								prize.backgroundColor,
 								prize.probability,
 								null,
+								prize.isSpinAgain ? 1 : 0,
 							],
 						})),
 						"write",
@@ -244,7 +263,7 @@ export async function createRoulette(
 	if (prizes.length > 0) {
 		await client.batch(
 			prizes.map((prize) => ({
-				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode) VALUES (?, ?, ?, ?, ?, ?)",
+				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode, is_spin_again) VALUES (?, ?, ?, ?, ?, ?, ?)",
 				args: [
 					rouletteId,
 					prize.name,
@@ -252,6 +271,7 @@ export async function createRoulette(
 					prize.probability,
 					prize.image ?? null,
 					prize.labelMode ?? "both",
+					prize.isSpinAgain ? 1 : 0,
 				],
 			})),
 			"write",
@@ -280,7 +300,7 @@ export async function updateRoulette(
 			args: [id],
 		},
 		...prizes.map((prize) => ({
-			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode) VALUES (?, ?, ?, ?, ?, ?)",
+			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode, is_spin_again) VALUES (?, ?, ?, ?, ?, ?, ?)",
 			args: [
 				id,
 				prize.name,
@@ -288,6 +308,7 @@ export async function updateRoulette(
 				prize.probability,
 				prize.image ?? null,
 				prize.labelMode ?? "both",
+				prize.isSpinAgain ? 1 : 0,
 			],
 		})),
 	];

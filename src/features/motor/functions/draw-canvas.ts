@@ -182,12 +182,10 @@ const truncateText = (
 };
 
 /**
- * Dibuja el nombre del premio siempre horizontal y legible.
- * - Si hay imagen: se ancla justo debajo de la imagen (en Y de pantalla),
- *   con un pequeño hueco. El texto sigue horizontal y orbita con el sector.
- * - Si no hay imagen: se usa la posición radial original (labelOffset).
- * En ambos casos, el ancho máximo es la cuerda del sector en el radio real
- * del punto de anclaje, y se aplica clip al sector para no invadir vecinos.
+ * Dibuja el nombre del premio SIEMPRE horizontal, anclado al centro de su sector.
+ * El texto orbita con el sector pero siempre se mantiene en su posición radial fija
+ * (no se mueve debajo de la imagen). La imagen gira en su propio eje; el texto
+ * solo rota en su eje para mantenerse horizontal/legible.
  */
 const drawPieLabel = ({
   context,
@@ -199,34 +197,22 @@ const drawPieLabel = ({
   labelOffset,
   maxLines,
   imageAnchor,
-}: DrawPieLabel & { imageAnchor?: ImageAnchor | null }): void => {
-  let labelX: number;
-  let labelY: number;
-  let labelRadius: number;
+  imgOffset,
+  midDeg,
+}: DrawPieLabel): void => {
+  // Siempre posicionar el texto en el centro del sector (labelOffset)
+  // independientemente de si hay imagen o no
+  const pos = calculateLabelPosition({
+    geometry,
+    segmentStartAngle,
+    anglePerSegment,
+    labelOffset,
+  });
+  const labelX = pos.labelX;
+  const labelY = pos.labelY;
+  const labelRadius = geometry.radius * labelOffset;
 
-  if (imageAnchor) {
-    // Ancla del texto = centro de la imagen + mitad altura imagen + hueco
-    const gap = geometry.radius * 0.09; // ~9% del radio
-    labelX = imageAnchor.centerX;
-    labelY = imageAnchor.centerY + imageAnchor.height / 2 + gap;
-    // Radio real de este punto (distancia al centro) para calcular cuerda
-    const dx = labelX - geometry.center.x;
-    const dy = labelY - geometry.center.y;
-    labelRadius = Math.hypot(dx, dy);
-  } else {
-    // Sin imagen: posición radial original
-    const pos = calculateLabelPosition({
-      geometry,
-      segmentStartAngle,
-      anglePerSegment,
-      labelOffset,
-    });
-    labelX = pos.labelX;
-    labelY = pos.labelY;
-    labelRadius = geometry.radius * labelOffset;
-  }
-
-  // Ancho disponible: cuerda del sector en el radio real del punto de texto
+  // Ancho disponible: cuerda del sector en el radio del texto
   const chordHalfAngle = (anglePerSegment * Math.PI) / 360;
   const chordWidth = 2 * labelRadius * Math.sin(chordHalfAngle) * 0.92;
   const maxWidth = Math.max(16, chordWidth);
@@ -235,7 +221,7 @@ const drawPieLabel = ({
   const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
 
   context.save();
-  // Texto siempre horizontal: solo trasladamos al punto de anclaje, sin rotar.
+  // Texto SIEMPRE horizontal (sin rotación)
   context.setTransform(1, 0, 0, 1, labelX, labelY);
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -245,7 +231,7 @@ const drawPieLabel = ({
   let fontSize = baseSize;
   let lines = wrapText(context, pie.name, maxWidth, maxLines);
 
-  // Reduce el tamaño hasta que las líneas entren (sin deformar el texto).
+  // Reduce el tamaño hasta que las líneas entren
   if (fontSizeMatch) {
     while (
       fontSize > 9 &&
@@ -257,7 +243,7 @@ const drawPieLabel = ({
     }
   }
 
-  // Si aun así no cabe (nombre muy largo), se recorta con elipsis.
+  // Si aun así no cabe, se recorta con elipsis
   lines = lines.map((line) => truncateText(context, line, maxWidth));
 
   const lineHeight = fontSize * 1.05;
@@ -270,8 +256,8 @@ const drawPieLabel = ({
 };
 
 /**
- * Dibuja la imagen del premio y devuelve su ancla y dimensiones en pantalla.
- * Aplica tamaño adaptativo para evitar recortes por los bordes del sector.
+ * Dibuja la imagen del premio ROTADA con el sector y devuelve su ancla.
+ * La imagen gira junto con su porción de ruleta (mantiene orientación relativa).
  */
 const drawPieImage = ({
   context,
@@ -289,24 +275,18 @@ const drawPieImage = ({
   const imgOffset = imageOptions?.offset ?? style.image.offset;
   const imgSize = imageOptions?.size ?? style.image.size;
 
+  // Ángulo central del sector en radianes de canvas (incluye rotación de la ruleta)
   const midDeg = degreesToCanvasRadians(
     segmentStartAngle + anglePerSegment / 2,
   );
-  const centerX =
-    geometry.center.x + geometry.radius * imgOffset * Math.cos(midDeg);
-  const centerY =
-    geometry.center.y + geometry.radius * imgOffset * Math.sin(midDeg);
 
   const box = geometry.radius * imgSize;
 
   // --- Tamaño adaptativo: limitar la caja para que quepa en el sector ---
-  // Ancho máximo del sector a la altura del centro de la imagen (cuerda).
-  // Usamos un factor de seguridad del 85% para evitar bordes recortados.
   const sectorHalfAngleRad = (anglePerSegment / 2) * Math.PI / 180;
   const chordAtCenter = 2 * geometry.radius * imgOffset * Math.sin(sectorHalfAngleRad);
   const maxBox = chordAtCenter * 0.85;
   const clampedBox = Math.min(box, maxBox);
-  // No permitir que la caja sea menor que un mínimo razonable
   const finalBox = Math.max(clampedBox, geometry.radius * 0.08);
 
   const scale = Math.min(
@@ -341,14 +321,18 @@ const drawPieImage = ({
   context.closePath();
   context.clip();
 
-  // Imagen siempre en orientación natural: solo trasladamos, sin rotar.
+  // Imagen SIEMPRE horizontal (sin rotación), posicionada en el centro del sector
+  const centerX = geometry.center.x + geometry.radius * imgOffset * Math.cos(midDeg);
+  const centerY = geometry.center.y + geometry.radius * imgOffset * Math.sin(midDeg);
   context.setTransform(1, 0, 0, 1, centerX, centerY);
   context.shadowColor = style.image.shadowColor;
   context.shadowBlur = style.image.shadowBlur;
   context.shadowOffsetY = 2;
   context.drawImage(image, -width / 2, -height / 2, width, height);
+
   context.restore();
 
+  // Devolver posición del centro de la imagen (para compatibilidad)
   return { centerX, centerY, height };
 };
 
@@ -373,6 +357,12 @@ export interface DrawPieLabel {
   labelOffset: number;
   /** Máximo de líneas del nombre (2 cuando hay imágenes). */
   maxLines: number;
+  /** Ancla de la imagen (si existe) para colocar el texto debajo. */
+  imageAnchor?: ImageAnchor | null;
+  /** Offset radial de la imagen (para aplicar la misma transformación). */
+  imgOffset?: number;
+  /** Ángulo central del sector en radianes de canvas. */
+  midDeg?: number;
 }
 
 export interface DrawPie {
@@ -470,24 +460,23 @@ const getImageDrawOptions = (
   hasImage: boolean,
   hasName: boolean,
 ): ImageDrawOptions => {
-  // Default: offset 0.78, size 0.26 (deja espacio para texto debajo)
-  const defaultOffset = 0.78;
-  const defaultSize = 0.26;
+  // Default: offset 0.83, size 0.28 (imagen más arriba, tamaño ligeramente mayor)
+  const defaultOffset = 0.83;
+  const defaultSize = 0.28;
 
-  // Si no hay nombre: imagen hacia el borde (como los otros modos), un poco más grande
-  // porque no necesita espacio para texto debajo.
+  // Si no hay nombre: imagen hacia el borde, un poco más grande
   if (!hasName && hasImage) {
-    return { offset: 0.76, size: 0.30 };
+    return { offset: 0.82, size: 0.30 };
   }
 
   // Modo "win" con imagen: misma posición que sin nombre (hacia el borde, sin texto)
   if (labelMode === "win" && hasImage) {
-    return { offset: 0.76, size: 0.30 };
+    return { offset: 0.82, size: 0.30 };
   }
 
   // Modo "wheel" con imagen: offset un poco más centrado, mismo tamaño que sin nombre
   if (labelMode === "wheel" && hasImage) {
-    return { offset: 0.65, size: 0.30 };
+    return { offset: 0.72, size: 0.30 };
   }
 
   // Modo "both" con imagen: default
@@ -563,13 +552,16 @@ export const drawRoulette = ({
     });
   }
 
-  // PASO 2: Dibujar todas las imágenes y capturar sus anclas
+  // PASO 2: Dibujar todas las imágenes y capturar sus anclas + params de rotación
   // Usando opciones de posición/tamaño según labelMode y si hay nombre
   // Keyed por índice para soportar nombres vacíos/duplicados
   const imageAnchors = new Map<number, ImageAnchor | null>();
+  const imageParams = new Map<number, { imgOffset: number; midDeg: number }>();
   resolvedPieList.forEach((pie, index) => {
     if (pie.image) {
       const imageOpts = getImageDrawOptions(pie.labelMode, true, pie.hasName);
+      const imgOffset = imageOpts.offset;
+      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
       const anchor = drawPieImage({
         context,
         geometry,
@@ -580,8 +572,12 @@ export const drawRoulette = ({
         imageOptions: imageOpts,
       });
       imageAnchors.set(index, anchor);
+      imageParams.set(index, { imgOffset, midDeg });
     } else {
       imageAnchors.set(index, null);
+      // Para labels sin imagen, también calculamos midDeg para rotar el texto
+      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
+      imageParams.set(index, { imgOffset: style.label.offset, midDeg });
     }
   });
 
@@ -599,6 +595,7 @@ export const drawRoulette = ({
       : style.label.offset;
     const labelMaxLines = hasImage ? 2 : 1;
     const imageAnchor = imageAnchors.get(index) ?? null;
+    const params = imageParams.get(index) ?? { imgOffset: style.label.offset, midDeg: degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2) };
     drawPieLabel({
       context,
       geometry,
@@ -609,6 +606,8 @@ export const drawRoulette = ({
       labelOffset,
       maxLines: labelMaxLines,
       imageAnchor,
+      imgOffset: params.imgOffset,
+      midDeg: params.midDeg,
     });
   });
 
@@ -653,6 +652,7 @@ interface DrawCanvas {
   rouletteItemList: RouletteItem[];
   mergedOptions: DefaultRouletteOptions;
   context: CanvasRenderingContext2D;
+  labelContext: CanvasRenderingContext2D;
   geometry: {
     center: {
       x: number;
@@ -666,23 +666,207 @@ interface DrawCanvas {
   }>;
 }
 
+// Dibuja solo el contenido (sectores + imágenes) en el canvas principal
+export const drawRouletteContent = ({
+  initialAngleOffset,
+  context,
+  startAngle,
+  geometry,
+  pieList,
+  style,
+}: DrawRoulette) => {
+  const itemCount = pieList.length;
+  if (itemCount === 0) return;
+
+  const anglePerSegment = calculateSegmentAngle(itemCount);
+  let segmentEndAngle = (initialAngleOffset % 360) + startAngle;
+
+  const resolvedPieList = pieList.map((pie, index) => {
+    const theme = style.pie.theme[index % style.pie.theme.length];
+    const bg = pie.bg || theme.bg;
+
+    const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
+    segmentEndAngle = segmentStartAngle;
+
+    const hasName = Boolean(pie.name && pie.name.trim());
+
+    return {
+      name: pie.name,
+      bg,
+      image: pie.image ?? null,
+      labelMode: pie.labelMode ?? "both",
+      hasName,
+      color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
+      segmentStartAngle,
+    };
+  });
+
+  // PASO 1: Dibujar todos los sectores (fondos + bordes internos)
+  for (const pie of resolvedPieList) {
+    drawPie({
+      context,
+      geometry,
+      pie,
+      segmentStartAngle: pie.segmentStartAngle,
+      anglePerSegment,
+      style,
+    });
+  }
+
+  // PASO 2: Dibujar todas las imágenes y capturar sus anclas + params de rotación
+  const imageAnchors = new Map<number, ImageAnchor | null>();
+  const imageParams = new Map<number, { imgOffset: number; midDeg: number }>();
+  resolvedPieList.forEach((pie, index) => {
+    if (pie.image) {
+      const imageOpts = getImageDrawOptions(pie.labelMode, true, pie.hasName);
+      const imgOffset = imageOpts.offset;
+      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
+      const anchor = drawPieImage({
+        context,
+        geometry,
+        pie,
+        segmentStartAngle: pie.segmentStartAngle,
+        anglePerSegment,
+        style,
+        imageOptions: imageOpts,
+      });
+      imageAnchors.set(index, anchor);
+      imageParams.set(index, { imgOffset, midDeg });
+    } else {
+      imageAnchors.set(index, null);
+      const midDeg = degreesToCanvasRadians(pie.segmentStartAngle + anglePerSegment / 2);
+      imageParams.set(index, { imgOffset: style.label.offset, midDeg });
+    }
+  });
+
+  // has border - borde exterior metálico
+  if (
+    style?.pie?.border === false ||
+    style?.pie?.borderWidth == null ||
+    style?.pie?.borderColor == null
+  ) {
+    return;
+  }
+
+  const lineWidth = style.pie.borderWidth ?? 1.5;
+  const outerGradient = context.createLinearGradient(
+    geometry.center.x - geometry.radius,
+    geometry.center.y - geometry.radius,
+    geometry.center.x + geometry.radius,
+    geometry.center.y + geometry.radius
+  );
+  outerGradient.addColorStop(0, "#f0f4f7");
+  outerGradient.addColorStop(0.25, "#c3ccd3");
+  outerGradient.addColorStop(0.5, "#7b868f");
+  outerGradient.addColorStop(0.75, "#39424a");
+  outerGradient.addColorStop(1, "#f0f4f7");
+
+  context.beginPath();
+  context.strokeStyle = outerGradient;
+  context.lineWidth = lineWidth;
+  context.arc(
+    geometry.center.x,
+    geometry.center.y,
+    geometry.radius - lineWidth / 2,
+    0,
+    Math.PI * 2,
+    true,
+  );
+  context.stroke();
+};
+
+// Dibuja solo los textos en el canvas de etiquetas
+export const drawRouletteLabels = ({
+  initialAngleOffset,
+  context,
+  startAngle,
+  geometry,
+  pieList,
+  style,
+}: DrawRoulette) => {
+  const itemCount = pieList.length;
+  if (itemCount === 0) return;
+
+  const anglePerSegment = calculateSegmentAngle(itemCount);
+  let segmentEndAngle = (initialAngleOffset % 360) + startAngle;
+
+  const resolvedPieList = pieList.map((pie, index) => {
+    const theme = style.pie.theme[index % style.pie.theme.length];
+    const bg = pie.bg || theme.bg;
+
+    const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
+    segmentEndAngle = segmentStartAngle;
+
+    const hasName = Boolean(pie.name && pie.name.trim());
+
+    return {
+      name: pie.name,
+      bg,
+      image: pie.image ?? null,
+      labelMode: pie.labelMode ?? "both",
+      hasName,
+      color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
+      segmentStartAngle,
+    };
+  });
+
+  // Dibujar todos los textos (ya no necesitan anclas de imagen)
+  resolvedPieList.forEach((pie) => {
+    if (!shouldDrawLabel(pie.labelMode, Boolean(pie.image), pie.hasName)) {
+      return;
+    }
+    const hasImage = Boolean(pie.image);
+    const labelOffset = hasImage
+      ? Math.min(style.label.offset, 0.58)
+      : style.label.offset;
+    const labelMaxLines = hasImage ? 2 : 1;
+    drawPieLabel({
+      context,
+      geometry,
+      pie,
+      segmentStartAngle: pie.segmentStartAngle,
+      anglePerSegment,
+      style,
+      labelOffset,
+      maxLines: labelMaxLines,
+      imageAnchor: null,
+      imgOffset: style.label.offset,
+      midDeg: 0,
+    });
+  });
+};
+
 export const drawCanvas = ({
   rouletteItemList,
   mergedOptions,
   context,
+  labelContext,
   geometry,
   rouletteRef,
 }: DrawCanvas) => {
+  // Canvas principal: fondo + sectores + imágenes
   context.beginPath();
   context.fillStyle = mergedOptions.style.canvas.bg;
   context.fillRect(0, 0, geometry.radius * 2, geometry.radius * 2);
 
-  drawRoulette({
+  drawRouletteContent({
     pieList: rouletteItemList,
     initialAngleOffset: rouletteRef.current.totalRotation,
     startAngle: mergedOptions.determineAngle,
     style: mergedOptions.style,
     context,
+    geometry,
+  });
+
+  // Canvas de etiquetas: solo textos (fondo transparente)
+  labelContext.clearRect(0, 0, geometry.radius * 2, geometry.radius * 2);
+
+  drawRouletteLabels({
+    pieList: rouletteItemList,
+    initialAngleOffset: rouletteRef.current.totalRotation,
+    startAngle: mergedOptions.determineAngle,
+    style: mergedOptions.style,
+    context: labelContext,
     geometry,
   });
 

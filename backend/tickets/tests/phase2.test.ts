@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";
 import {
 	redeemTicket,
+	releaseReservation,
 	reserveTicket,
 	validateTicket,
 	voidTicket,
@@ -122,6 +123,20 @@ describe("Fase 2: reserva y canje", () => {
 		const validation = await validateTicket(client, hash);
 		expect(validation.valid).toBe(false);
 		expect(validation.reason).toBe("already_redeemed");
+	});
+
+	it("libera la reserva cuando el giro cae en Inténtalo de nuevo", async () => {
+		const { hash } = await newTicket();
+
+		const reserved = await reserveTicket(client, hash, 5);
+		expect(reserved.success).toBe(true);
+
+		// El servidor libera la reserva para no consumir el ticket.
+		await releaseReservation(client, hash);
+
+		const validation = await validateTicket(client, hash);
+		expect(validation.valid).toBe(true);
+		expect(validation.ticket?.status).toBe("available");
 	});
 
 	it("libera una reserva vencida", async () => {

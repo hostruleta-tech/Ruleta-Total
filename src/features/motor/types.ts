@@ -27,6 +27,8 @@ export interface RouletteItem {
   weight?: number;
   image?: string | null;
   labelMode?: LabelMode | null;
+  /** Casilla "Inténtalo de nuevo": no consume el ticket y permite girar otra vez. */
+  isSpinAgain?: boolean;
 }
 
 interface CanvasStyle {
@@ -86,4 +88,5 @@ export interface StyleOption {
 export interface RouletteCanvas {
   size: number;
   canvasRef: React.RefObject<HTMLCanvasElement>;
+  labelCanvasRef: React.RefObject<HTMLCanvasElement>;
 }

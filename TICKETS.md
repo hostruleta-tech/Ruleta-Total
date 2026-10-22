@@ -92,6 +92,12 @@ Tablas creadas:
    - devuelve el premio y el ID del ticket como código de reclamación.
 5. El botón queda deshabilitado: un ticket permite exactamente un giro.
 
+Excepción: las casillas marcadas como **Inténtalo de nuevo** (columna
+`is_spin_again`) no consumen el ticket. Si el giro cae en una de ellas, el
+servidor libera la reserva y el participante ve un aviso simple con la opción
+**Girar de nuevo**, usando el mismo ticket. El ticket solo se canjea cuando el
+resultado es un premio real.
+
 Si el ticket estaba reservado y la reserva venció, se libera automáticamente
 y puede volver a usarse. Un ticket canjeado no se puede anular ni reutilizar.
 

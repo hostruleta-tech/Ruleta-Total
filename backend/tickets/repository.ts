@@ -428,6 +428,25 @@ async function releaseExpiredReservation(
 }
 
 /**
+ * Libera una reserva activa y devuelve el ticket a `available`.
+ * Se usa cuando el giro cae en una casilla "Inténtalo de nuevo": el ticket
+ * no se consume y el participante puede volver a girar.
+ */
+export async function releaseReservation(
+	client: Client,
+	tokenHash: string,
+): Promise<void> {
+	await client.execute({
+		sql: `UPDATE tickets
+              SET status = 'available',
+                  reserved_at = NULL,
+                  reserved_until = NULL
+              WHERE token_hash = ? AND status = 'reserved'`,
+		args: [tokenHash],
+	});
+}
+
+/**
  * Reserva un ticket: available -> reserved.
  * Atómico: solo tiene éxito si el ticket está disponible y no expirado.
  */

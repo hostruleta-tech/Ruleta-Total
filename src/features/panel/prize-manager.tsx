@@ -26,6 +26,8 @@ export interface Prize {
 	image?: string | null;
 	/** Dónde mostrar el nombre: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
 	labelMode?: LabelMode | null;
+	/** Casilla "Inténtalo de nuevo": no consume el ticket y permite girar otra vez. */
+	isSpinAgain?: boolean;
 }
 
 interface PrizeManagerProps {
@@ -52,6 +54,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		probability: 10,
 		image: null,
 		labelMode: "both",
+		isSpinAgain: false,
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const toast = useToast();
@@ -119,6 +122,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			probability: 10,
 			image: null,
 			labelMode: "both",
+			isSpinAgain: false,
 		});
 	};
 
@@ -129,7 +133,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	const handlePrizeChange = (
 		index: number,
 		field: keyof Prize,
-		value: string | number | null,
+		value: string | number | boolean | null,
 	) => {
 		setPrizes((prev) =>
 			prev.map((prize, i) => {
@@ -146,6 +150,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				}
 				if (field === "labelMode") {
 					return { ...prize, labelMode: value as LabelMode | null };
+				}
+				if (field === "isSpinAgain") {
+					return { ...prize, isSpinAgain: Boolean(value) };
 				}
 				return { ...prize, name: String(value) };
 			}),
@@ -244,6 +251,24 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 											placeholder={prize.image ? "Opcional (tiene imagen)" : "Nombre del premio"}
 											aria-label={`Nombre del premio ${index + 1}`}
 										/>
+										<label
+											className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-teal-700"
+											title="Al caer aquí no se consume el ticket y el cliente puede girar otra vez"
+										>
+											<input
+												type="checkbox"
+												checked={prize.isSpinAgain === true}
+												onChange={(e) =>
+													handlePrizeChange(
+														index,
+														"isSpinAgain",
+														e.target.checked,
+													)
+												}
+												className="h-3.5 w-3.5 accent-[#005f63]"
+											/>
+											Inténtalo de nuevo
+										</label>
 									</div>
 									<PrizeImageInput
 										value={prize.image}
@@ -329,6 +354,23 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 									className="h-9"
 									aria-label="Nombre del nuevo premio"
 								/>
+								<label
+									className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-teal-700"
+									title="Al caer aquí no se consume el ticket y el cliente puede girar otra vez"
+								>
+									<input
+										type="checkbox"
+										checked={newPrize.isSpinAgain === true}
+										onChange={(e) =>
+											setNewPrize({
+												...newPrize,
+												isSpinAgain: e.target.checked,
+											})
+										}
+										className="h-3.5 w-3.5 accent-[#005f63]"
+									/>
+									Inténtalo de nuevo
+								</label>
 							</div>
 							<PrizeImageInput
 								value={newPrize.image}

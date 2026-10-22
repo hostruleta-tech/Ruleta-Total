@@ -89,8 +89,14 @@ async function main() {
 		if (tmpl.prizes.length > 0) {
 			await client.batch(
 				tmpl.prizes.map((prize) => ({
-					sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability) VALUES (?, ?, ?, ?)",
-					args: [rouletteId, prize.name, prize.backgroundColor, prize.probability],
+					sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, is_spin_again) VALUES (?, ?, ?, ?, ?)",
+					args: [
+						rouletteId,
+						prize.name,
+						prize.backgroundColor,
+						prize.probability,
+						prize.isSpinAgain ? 1 : 0,
+					],
 				})),
 				"write",
 			);

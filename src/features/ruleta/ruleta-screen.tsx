@@ -9,6 +9,7 @@ import { useRoulette } from "@/features/motor/hooks/use-roulette";
 import type { RouletteItem } from "@/features/motor/types";
 import { Roulette } from "@/features/motor/components/roulette";
 import { PrizeModal } from "./prize-modal";
+import { SpinAgainNotice } from "./spin-again-notice";
 import { soundManager } from "@/shared/sound-manager";
 import { useFullscreen } from "@/shared/use-fullscreen";
 import { API_URL } from "@/shared/api";
@@ -195,12 +196,15 @@ interface SpinResponse {
   prizeIndex: number;
   prize: string;
   prizeImageUrl?: string | null;
+  /** true cuando la casilla ganadora es "Inténtalo de nuevo". */
+  spinAgain?: boolean;
   prizes: {
     name: string;
     backgroundColor: string;
     probability: number;
     imageUrl?: string | null;
     labelMode?: "wheel" | "win" | "both";
+    isSpinAgain?: boolean;
   }[];
   rouletteId: number;
   demo?: boolean;
@@ -263,6 +267,12 @@ export const RouletteViewHook: React.FC = () => {
   const [lastSpinWasDemo, setLastSpinWasDemo] = useState(false);
   const [winnerLabelMode, setWinnerLabelMode] = useState<"wheel" | "win" | "both">("both");
   const isModalOpen = finalResult !== null;
+
+  // Marca el giro actual como "Inténtalo de nuevo". Se usa un ref porque el
+  // resultado de la animación puede llegar antes de que React re-renderice.
+  const spinAgainRef = useRef(false);
+  // Premio de la casilla "Inténtalo de nuevo" que se está mostrando (o null).
+  const [spinAgainNotice, setSpinAgainNotice] = useState<string | null>(null);
 
   // Lee el token del fragmento, lo borra de la barra de direcciones y lo
   // valida contra el servidor sin consumir el ticket.
@@ -374,6 +384,7 @@ export const RouletteViewHook: React.FC = () => {
             probability: number;
             imageUrl?: string | null;
             labelMode?: "wheel" | "win" | "both";
+            isSpinAgain?: boolean;
           }[]
         ).map((p) => ({
           name: p.name,
@@ -381,6 +392,7 @@ export const RouletteViewHook: React.FC = () => {
           weight: p.probability,
           image: p.imageUrl ?? null,
           labelMode: p.labelMode ?? "both",
+          isSpinAgain: p.isSpinAgain === true,
         }));
         setRouletteItems(formattedPrizes);
       } catch (error) {
@@ -446,6 +458,8 @@ export const RouletteViewHook: React.FC = () => {
       }
 
       const spinData: SpinResponse = await response.json();
+      const isSpinAgain = spinData.spinAgain === true;
+      spinAgainRef.current = isSpinAgain;
 
       const formattedPrizes: RouletteItem[] = spinData.prizes.map((p) => ({
         name: p.name,
@@ -453,12 +467,16 @@ export const RouletteViewHook: React.FC = () => {
         weight: p.probability,
         image: p.imageUrl ?? null,
         labelMode: p.labelMode ?? "both",
+        isSpinAgain: p.isSpinAgain === true,
       }));
       setRouletteItems(formattedPrizes);
 
       if (!spinData.demo) {
-        setClaimCode(spinData.claimCode ?? null);
-        setHasSpun(true);
+        // Si cayó en "Inténtalo de nuevo", el ticket NO se consume.
+        if (!isSpinAgain) {
+          setClaimCode(spinData.claimCode ?? null);
+          setHasSpun(true);
+        }
         setLastSpinWasDemo(false);
       } else {
         setLastSpinWasDemo(true);
@@ -474,6 +492,7 @@ export const RouletteViewHook: React.FC = () => {
       controlsRef.current?.start(spinData.prizeIndex);
     } catch (err) {
       console.error("Spin failed:", err);
+      spinAgainRef.current = false;
       setError(err instanceof Error ? err.message : "Error al procesar el giro");
       setIsSpinning(false);
       soundManager.playSpinStart();
@@ -489,6 +508,13 @@ export const RouletteViewHook: React.FC = () => {
   };
 
   const handlePrizeWon = (prize: string) => {
+    // Casilla "Inténtalo de nuevo": aviso simple, sin modal de premio.
+    if (spinAgainRef.current) {
+      spinAgainRef.current = false;
+      setSpinAgainNotice(prize);
+      return;
+    }
+
     setFinalResult(prize);
     // Respaldo: si el servidor no envió la imagen, se busca en los premios.
     const winningItem = rouletteItems?.find((item) => item.name === prize);
@@ -500,7 +526,12 @@ export const RouletteViewHook: React.FC = () => {
     soundManager.playWin();
   };
 
-  const hasWinnerName = finalResult && finalResult.trim().length > 0;
+  const handleSpinAgainRetry = () => {
+    setSpinAgainNotice(null);
+    void handleSpin();
+  };
+
+  const hasWinnerName = Boolean(finalResult && finalResult.trim().length > 0);
 
   const canSpin = (ticketState.kind === "valid" && !hasSpun) || ticketState.kind === "admin";
 
@@ -1030,6 +1061,15 @@ export const RouletteViewHook: React.FC = () => {
             setWinnerImage(null);
           }}
           showName={hasWinnerName && (winnerLabelMode !== "wheel" || !winnerImage)}
+        />
+      )}
+
+      {/* Aviso simple de la casilla "Inténtalo de nuevo" */}
+      {spinAgainNotice !== null && (
+        <SpinAgainNotice
+          prize={spinAgainNotice}
+          onRetry={handleSpinAgainRetry}
+          onClose={() => setSpinAgainNotice(null)}
         />
       )}
     </div>

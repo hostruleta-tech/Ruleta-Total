@@ -20,6 +20,7 @@ import {
   getBatchById,
   reserveTicket,
   redeemTicket,
+  releaseReservation,
   validateTicket,
   listBatches,
   listBatchTickets,
@@ -104,6 +105,8 @@ function sanitizePrizes(raw: unknown): Prize[] {
       labelMode = candidate.labelMode;
     }
 
+    const isSpinAgain = candidate.isSpinAgain === true;
+
     return {
       roulette_id: Number(candidate.roulette_id) || 0,
       name,
@@ -111,6 +114,7 @@ function sanitizePrizes(raw: unknown): Prize[] {
       probability,
       image,
       labelMode,
+      isSpinAgain,
     };
   });
 }
@@ -124,6 +128,7 @@ function toPublicPrize(prize: Prize) {
     probability: prize.probability,
     imageUrl: prize.imageUrl ?? null,
     labelMode: prize.labelMode ?? "both",
+    isSpinAgain: prize.isSpinAgain === true,
   };
 }
 
@@ -483,6 +488,7 @@ router.post("/spin", async (req, res) => {
 
       return res.json({
         demo: true,
+        spinAgain: prize.isSpinAgain === true,
         prizeIndex: winnerIndex,
         prize: prize.name,
         prizeImageUrl: prize.imageUrl ?? null,
@@ -527,6 +533,20 @@ router.post("/spin", async (req, res) => {
     // 3. Sortear premio
     const winnerIndex = pickWeightedIndex(active.prizes);
     const prize = active.prizes[winnerIndex];
+
+    // 3b. Casilla "Inténtalo de nuevo": no se canjea el ticket.
+    // Se libera la reserva para que el mismo ticket pueda girar otra vez.
+    if (prize.isSpinAgain === true) {
+      await releaseReservation(client, tokenHash);
+      return res.json({
+        spinAgain: true,
+        prizeIndex: winnerIndex,
+        prize: prize.name,
+        prizeImageUrl: prize.imageUrl ?? null,
+        prizes: active.prizes.map(toPublicPrize),
+        rouletteId: active.id,
+      });
+    }
 
     // 4. Canjear ticket con el premio
     const prizeInfo: PrizeInfo = {
