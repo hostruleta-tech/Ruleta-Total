@@ -15,6 +15,7 @@ import {
   calculateLabelPosition,
   calculateSegmentAngle,
   degreesToCanvasRadians,
+  getSegmentIndexAtPointer,
 } from "./utils";
 
 /** Texto oscuro de marca para fondos claros (evita el negro puro). */
@@ -882,6 +883,95 @@ export const drawRouletteContent = ({
   context.stroke();
 };
 
+/**
+ * Dibuja el nombre del premio actual (bajo el puntero) en vertical,
+ * fijo en la pantalla (no gira con la ruleta), desde el centro hacia
+ * el borde exterior en la dirección del puntero.
+ */
+export const drawFixedVerticalLabel = ({
+  context,
+  geometry,
+  rouletteItemList,
+  totalRotation,
+  startAngle,
+  pointerAngle,
+  style,
+  innerMargin = 0.18,
+  outerMargin = 0.08,
+}: {
+  context: CanvasRenderingContext2D;
+  geometry: { center: { x: number; y: number }; radius: number };
+  rouletteItemList: { name: string; image?: string | null; labelMode?: string | null }[];
+  totalRotation: number;
+  startAngle: number;
+  pointerAngle: number;
+  style: { label: { font: string; defaultColor: string } };
+  /** Margen desde el centro (fracción del radio). */
+  innerMargin?: number;
+  /** Margen desde el borde exterior (fracción del radio). */
+  outerMargin?: number;
+}) => {
+  const itemCount = rouletteItemList.length;
+  if (itemCount === 0) return;
+
+  // Qué sector está bajo el puntero
+  const index = getSegmentIndexAtPointer({
+    totalRotation,
+    itemCount,
+    startAngle,
+    pointerAngle,
+  });
+  if (index < 0) return;
+
+  const prize = rouletteItemList[index];
+  if (!prize.name || !prize.name.trim()) return;
+
+  // Solo mostrar si NO tiene imagen
+  if (prize.image) return;
+
+  const { center, radius } = geometry;
+  const innerRadius = radius * innerMargin;
+  const outerRadius = radius * (1 - outerMargin);
+  const availableHeight = outerRadius - innerRadius;
+
+  // Ángulo del puntero en radianes de canvas
+  const pointerRad = degreesToCanvasRadians(pointerAngle);
+
+  // Texto en vertical (caracteres apilados)
+  const chars = [...prize.name.trim()];
+  if (chars.length === 0) return;
+
+  const fontSizeMatch = FONT_SIZE_PATTERN.exec(style.label.font);
+  const baseSize = fontSizeMatch ? Number.parseFloat(fontSizeMatch[0]) : 16;
+
+  let fontSize = baseSize;
+  const lineHeight = fontSize * 1.15;
+
+  // Ajustar tamaño para que quepa en la altura disponible
+  while (fontSize > 10 && chars.length * fontSize * 1.15 > availableHeight) {
+    fontSize = Math.max(10, fontSize - 1);
+  }
+
+  context.save();
+  context.setTransform(1, 0, 0, 1, center.x, center.y);
+  // Rotar al ángulo del puntero
+  context.rotate(pointerRad);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillStyle = style.label.defaultColor || "#FFFFFF";
+  context.font = withFontSize(style.label.font, fontSize);
+
+  const finalLineHeight = fontSize * 1.15;
+  const totalHeight = chars.length * finalLineHeight;
+  const startY = innerRadius + (availableHeight - totalHeight) / 2;
+
+  chars.forEach((char, idx) => {
+    context.fillText(char, 0, startY + idx * finalLineHeight + finalLineHeight / 2);
+  });
+
+  context.restore();
+};
+
 export const drawCanvas = ({
   rouletteItemList,
   mergedOptions,
@@ -901,6 +991,19 @@ export const drawCanvas = ({
     style: mergedOptions.style,
     context,
     geometry,
+  });
+
+  // Texto vertical fijo para premios sin imagen (bajo el puntero)
+  drawFixedVerticalLabel({
+    context,
+    geometry,
+    rouletteItemList,
+    totalRotation: rouletteRef.current.totalRotation,
+    startAngle: mergedOptions.determineAngle,
+    pointerAngle: mergedOptions.determineAngle,
+    style: mergedOptions.style,
+    innerMargin: 0.18,
+    outerMargin: 0.08,
   });
 
   if (mergedOptions.showArrow) {
