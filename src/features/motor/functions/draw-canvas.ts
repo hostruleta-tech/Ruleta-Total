@@ -231,17 +231,29 @@ const drawPieLabel = ({
     const radialLength = outerRadius - innerRadius;
 
     // Ajustar fontSize y paso para que la frase completa quepa en radialLength
-    let fontSize = baseSize;
-    let step = fontSize * 1.15; // espaciado entre caracteres (≈line-height)
+    // --- Parámetros de legibilidad ---
+    const CHAR_SPACING = 1.0;   // antes 1.15 → letras más juntas
+    const MIN_SPACING = 0.95;   // nunca solapar: paso mínimo ≈ alto de letra
+    const WIDE_CHAR = 0.85;     // ancho máx. aprox. de una letra vs fontSize
+
+    // Tope por ancho del sector (cuerda interior, la zona más angosta)
+    const innerChord = 2 * innerRadius * Math.sin((anglePerSegment * Math.PI) / 360);
+    const maxFontByChord = Math.max(9, (innerChord * 0.92) / WIDE_CHAR);
+
+    // Arranca más grande y ajusta
+    let fontSize = Math.min(baseSize * 1.3, maxFontByChord);
+    let step = fontSize * CHAR_SPACING;
 
     // Primero reducimos fontSize hasta que n * paso <= radialLength
-    while (fontSize > 8 && chars.length * step > radialLength) {
+    while (fontSize > 9 && chars.length * step > radialLength) {
       fontSize--;
-      step = fontSize * 1.15;
+      step = fontSize * CHAR_SPACING;
     }
-    // Si aún no cabe, compactamos el paso (espaciado más denso)
+
+    // Textos muy largos: compactar sin pasar del mínimo legible
+    const minStep = fontSize * MIN_SPACING;
     if (chars.length * step > radialLength) {
-      step = radialLength / chars.length;
+      step = Math.max(minStep, radialLength / chars.length);
     }
 
     context.save();
