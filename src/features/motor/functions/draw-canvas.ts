@@ -182,10 +182,8 @@ const truncateText = (
 };
 
 /**
- * Dibuja el nombre del premio SIEMPRE horizontal, anclado al centro de su sector.
- * El texto orbita con el sector pero siempre se mantiene en su posición radial fija
- * (no se mueve debajo de la imagen). La imagen gira en su propio eje; el texto
- * solo rota en su eje para mantenerse horizontal/legible.
+ * Dibuja el nombre del premio. Si vertical=true (solo texto, sin imagen),
+ * renderiza cada carácter apilado verticalmente. Si false, horizontal.
  */
 const drawPieLabel = ({
   context,
@@ -199,6 +197,7 @@ const drawPieLabel = ({
   imageAnchor,
   imgOffset,
   midDeg,
+  vertical = false,
 }: DrawPieLabel): void => {
   // Siempre posicionar el texto en el centro del sector (labelOffset)
   // independientemente de si hay imagen o no
@@ -228,6 +227,35 @@ const drawPieLabel = ({
   context.fillStyle = pie.color;
   context.font = style.label.font;
 
+  // RENDER VERTICAL: solo para premios sin imagen
+  if (vertical) {
+    const chars = [...pie.name.trim()];
+    if (chars.length === 0) {
+      context.restore();
+      return;
+    }
+
+    let fontSize = baseSize;
+    const lineHeight = fontSize * 1.15;
+
+    // Reducir tamaño hasta que la altura total quepa en el ancho disponible (chordWidth)
+    while (fontSize > 9 && chars.length * fontSize * 1.15 > chordWidth) {
+      fontSize = Math.max(9, fontSize - 1);
+    }
+
+    context.font = withFontSize(style.label.font, fontSize);
+    const finalLineHeight = fontSize * 1.15;
+    const firstOffset = -((chars.length - 1) * finalLineHeight) / 2;
+
+    chars.forEach((char, idx) => {
+      context.fillText(char, 0, firstOffset + idx * finalLineHeight);
+    });
+
+    context.restore();
+    return;
+  }
+
+  // RENDER HORIZONTAL (original): para premios con imagen
   let fontSize = baseSize;
   let lines = wrapText(context, pie.name, maxWidth, maxLines);
 
@@ -246,10 +274,10 @@ const drawPieLabel = ({
   // Si aun así no cabe, se recorta con elipsis
   lines = lines.map((line) => truncateText(context, line, maxWidth));
 
-  const lineHeight = fontSize * 1.05;
-  const firstLineOffset = -((lines.length - 1) * lineHeight) / 2;
+  const hLineHeight = fontSize * 1.05;
+  const firstLineOffset = -((lines.length - 1) * hLineHeight) / 2;
   lines.forEach((line, index) => {
-    context.fillText(line, 0, firstLineOffset + index * lineHeight);
+    context.fillText(line, 0, firstLineOffset + index * hLineHeight);
   });
 
   context.restore();
@@ -363,6 +391,8 @@ export interface DrawPieLabel {
   imgOffset?: number;
   /** Ángulo central del sector en radianes de canvas. */
   midDeg?: number;
+  /** Renderizar texto en vertical (solo texto, sin imagen). */
+  vertical?: boolean;
 }
 
 export interface DrawPie {
@@ -669,6 +699,7 @@ export const drawRoulette = ({
       imageAnchor,
       imgOffset: params.imgOffset,
       midDeg: params.midDeg,
+      vertical: !hasImage,
     });
   });
 
@@ -795,6 +826,7 @@ export const drawRouletteContent = ({
       imageAnchor: null,
       imgOffset: style.label.offset,
       midDeg: 0,
+      vertical: !hasImage,
     });
   });
 
