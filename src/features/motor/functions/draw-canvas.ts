@@ -250,6 +250,11 @@ const drawPieLabel = ({
     context.fillStyle = pie.color;
     context.font = withFontSize(style.label.font, fontSize);
 
+    // Rotación del bloque: solidaria al sector (la palabra gira con la rueda).
+    // atan2(dirX, -dirY) da 0 cuando el sector está arriba (dir=(0,-1)).
+    // El bloque rota con la rueda; si queda de cabeza al pasar por abajo, es correcto.
+    const blockRotation = Math.atan2(dirX, -dirY);
+
     // Centro del primer carácter a half-step desde innerRadius
     let distFromCenter = innerRadius + step * 0.5;
 
@@ -257,7 +262,11 @@ const drawPieLabel = ({
       if (distFromCenter > outerRadius) return; // seguridad
       const charX = geometry.center.x + dirX * distFromCenter;
       const charY = geometry.center.y + dirY * distFromCenter;
-      context.fillText(char, charX, charY);
+      context.save();
+      context.translate(charX, charY);
+      context.rotate(blockRotation);
+      context.fillText(char, 0, 0);
+      context.restore();
       distFromCenter += step;
     });
 
