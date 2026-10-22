@@ -374,6 +374,17 @@ export interface DrawPie {
   style: StyleOption;
 }
 
+/** Oscurece un color hex en un porcentaje (0-1). */
+const darkenColor = (hex: string, amount: number): string => {
+  const c = hex.replace("#", "");
+  const [r, g, b] = c.length === 3
+    ? c.split("").map((x) => Number.parseInt(x + x, 16))
+    : [Number.parseInt(c.slice(0, 2), 16), Number.parseInt(c.slice(2, 4), 16), Number.parseInt(c.slice(4, 6), 16)];
+  const f = 1 - amount;
+  const to = (v: number) => Math.round(Math.max(0, v * f)).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+};
+
 export const drawPie = ({
   context,
   geometry,
@@ -384,9 +395,19 @@ export const drawPie = ({
 }: DrawPie): void => {
   const startDeg = degreesToCanvasRadians(segmentStartAngle);
   const endDeg = degreesToCanvasRadians(segmentStartAngle + anglePerSegment);
+
+  // Gradiente radial: color original en el centro → versión oscura en el borde
+  const darker = darkenColor(pie.bg, 0.35);
+  const grad = context.createRadialGradient(
+    geometry.center.x, geometry.center.y, 0,
+    geometry.center.x, geometry.center.y, geometry.radius
+  );
+  grad.addColorStop(0, pie.bg);
+  grad.addColorStop(1, darker);
+
   context.beginPath();
   context.moveTo(geometry.center.x, geometry.center.y);
-  context.fillStyle = pie.bg;
+  context.fillStyle = grad;
   context.arc(
     geometry.center.x,
     geometry.center.y,
