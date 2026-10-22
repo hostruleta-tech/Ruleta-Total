@@ -225,35 +225,31 @@ const drawPieLabel = ({
     const chars = [...pie.name.trim()];
     if (chars.length === 0) return;
 
-    // Zona radial disponible: desde fuera del logo central (≈0.30R) hasta antes del borde (≈0.92R)
+    // Zona radial disponible: desde fuera del logo central (≈0.30R) hasta antes del borde (≈0.95R)
     const innerRadius = geometry.radius * 0.30;
-    const outerRadius = geometry.radius * 0.92;
+    const outerRadius = geometry.radius * 0.95;
     const radialLength = outerRadius - innerRadius;
 
-    // Ajustar fontSize y paso para que la frase completa quepa en radialLength
+    // Ajustar fontSize y paso para que la frase COMPLETA siempre quepa (sin recortes)
     // --- Parámetros de legibilidad ---
-    const CHAR_SPACING = 1.0;   // antes 1.15 → letras más juntas
-    const MIN_SPACING = 0.95;   // nunca solapar: paso mínimo ≈ alto de letra
+    const CHAR_SPACING = 1.0;   // letras juntas (sin separación extra)
     const WIDE_CHAR = 0.85;     // ancho máx. aprox. de una letra vs fontSize
 
     // Tope por ancho del sector (cuerda interior, la zona más angosta)
     const innerChord = 2 * innerRadius * Math.sin((anglePerSegment * Math.PI) / 360);
     const maxFontByChord = Math.max(9, (innerChord * 0.92) / WIDE_CHAR);
 
-    // Arranca más grande y ajusta
-    let fontSize = Math.min(baseSize * 1.3, maxFontByChord);
+    // Paso máximo que garantiza que la frase completa cabe en radialLength
+    const maxStep = radialLength / chars.length;
+
+    // Tamaño más grande posible: ni del objetivo, ni del sector, ni del que permita la frase completa
+    let fontSize = Math.min(baseSize * 1.3, maxFontByChord, maxStep / CHAR_SPACING);
     let step = fontSize * CHAR_SPACING;
 
-    // Primero reducimos fontSize hasta que n * paso <= radialLength
-    while (fontSize > 9 && chars.length * step > radialLength) {
-      fontSize--;
-      step = fontSize * CHAR_SPACING;
-    }
-
-    // Textos muy largos: compactar sin pasar del mínimo legible
-    const minStep = fontSize * MIN_SPACING;
+    // Redondeo de seguridad: si por decimales aún sobra, compactar exacto
     if (chars.length * step > radialLength) {
-      step = Math.max(minStep, radialLength / chars.length);
+      step = radialLength / chars.length;
+      fontSize = step; // evita solape (paso ≥ alto de letra)
     }
 
     context.save();
