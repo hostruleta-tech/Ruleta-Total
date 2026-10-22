@@ -6,6 +6,7 @@ interface PrizeModalProps {
 	prizeColor: string | null;
 	prizeImage?: string | null;
 	onClose: () => void;
+	showName?: boolean;
 }
 
 export const PrizeModal: React.FC<PrizeModalProps> = ({
@@ -13,6 +14,7 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 	prizeColor,
 	prizeImage,
 	onClose,
+	showName = true,
 }) => {
 	const btnRef = useRef<HTMLButtonElement>(null);
 	const overlayRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,11 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 						src={prizeImage}
 						alt={prize}
 						draggable={false}
-						className="mx-auto mb-4 h-auto w-auto max-h-[26vh] max-w-[min(70vw,220px)] object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+						className={`mx-auto mb-4 h-auto w-auto object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.18)] transition-all duration-300 ${
+							showName
+								? "max-h-[26vh] max-w-[min(70vw,220px)]"
+								: "max-h-[45vh] max-w-[min(85vw,320px)]"
+						}`}
 					/>
 				)}
 
@@ -72,12 +78,24 @@ export const PrizeModal: React.FC<PrizeModalProps> = ({
 				</h2>
 
 				{/* Nombre del premio con su color real */ }
-				<p
-					className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
-					style={{ color: prizeColor ?? "#005f63" }}
-				>
-					{prize}
-				</p>
+				{showName && (
+					<p
+						className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
+						style={{ color: prizeColor ?? "#005f63" }}
+					>
+						{prize}
+					</p>
+				)}
+
+				{/* Fallback: si no hay imagen y no se muestra nombre, mostrar el nombre */ }
+				{!showName && !prizeImage && (
+					<p
+						className="text-[clamp(28px,9vw,56px)] font-black leading-tight tracking-tight mb-8 mx-auto overflow-hidden break-words"
+						style={{ color: prizeColor ?? "#005f63" }}
+					>
+						{prize}
+					</p>
+				)}
 
 				{/* Botón cerrar simple */ }
 				<button

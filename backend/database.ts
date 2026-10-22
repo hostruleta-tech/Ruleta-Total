@@ -3,6 +3,8 @@ import { createClient, type Client } from "@libsql/client/web";
 import { runMigrations } from "./migrations";
 import { SEED_TEMPLATES } from "./seed-data";
 
+export type LabelMode = "wheel" | "win" | "both";
+
 export interface Prize {
 	id?: number;
 	roulette_id: number;
@@ -13,6 +15,8 @@ export interface Prize {
 	image?: string | null;
 	/** URL pública y ligera para dibujar la imagen en la ruleta. */
 	imageUrl?: string | null;
+	/** Dónde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
+	labelMode?: LabelMode | null;
 }
 
 export interface RouletteTemplate {
@@ -61,6 +65,7 @@ function mapPrize(row: Row): Prize {
 		probability: Number(row.probability),
 		image,
 		imageUrl: image ? `/api/prizes/${id}/image` : null,
+		labelMode: (row.label_mode as LabelMode | null) ?? "both",
 	};
 }
 
@@ -109,6 +114,17 @@ async function ensureInitialized(): Promise<Client> {
 		if (!hasImageColumn) {
 			await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
 			console.log("[db] Columna 'image' agregada a la tabla prizes.");
+		}
+
+		// Migración: columna label_mode para controlar visibilidad del nombre.
+		const hasLabelModeColumn = prizeColumns.rows.some(
+			(column) => column.name === "label_mode",
+		);
+		if (!hasLabelModeColumn) {
+			await client.execute(
+				"ALTER TABLE prizes ADD COLUMN label_mode TEXT NOT NULL DEFAULT 'both'",
+			);
+			console.log("[db] Columna 'label_mode' agregada a la tabla prizes.");
 		}
 
 		// Migraciones del sistema de tickets (idempotentes).
@@ -228,13 +244,14 @@ export async function createRoulette(
 	if (prizes.length > 0) {
 		await client.batch(
 			prizes.map((prize) => ({
-				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
+				sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode) VALUES (?, ?, ?, ?, ?, ?)",
 				args: [
 					rouletteId,
 					prize.name,
 					prize.backgroundColor,
 					prize.probability,
 					prize.image ?? null,
+					prize.labelMode ?? "both",
 				],
 			})),
 			"write",
@@ -263,13 +280,14 @@ export async function updateRoulette(
 			args: [id],
 		},
 		...prizes.map((prize) => ({
-			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image) VALUES (?, ?, ?, ?, ?)",
+			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode) VALUES (?, ?, ?, ?, ?, ?)",
 			args: [
 				id,
 				prize.name,
 				prize.backgroundColor,
 				prize.probability,
 				prize.image ?? null,
+				prize.labelMode ?? "both",
 			],
 		})),
 	];

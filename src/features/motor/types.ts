@@ -14,7 +14,11 @@ export interface Pie {
   name: string;
   color: string;
   image?: string | null;
+  labelMode?: LabelMode | null;
+  hasName?: boolean;
 }
+
+export type LabelMode = "wheel" | "win" | "both";
 
 export interface RouletteItem {
   name: string;
@@ -22,6 +26,7 @@ export interface RouletteItem {
   color?: string;
   weight?: number;
   image?: string | null;
+  labelMode?: LabelMode | null;
 }
 
 interface CanvasStyle {

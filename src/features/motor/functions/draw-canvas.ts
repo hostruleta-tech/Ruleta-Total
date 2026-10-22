@@ -6,6 +6,7 @@ import type {
   RouletteItem,
   StyleOption,
   StyleOptionDefault,
+  LabelMode,
 } from "../types";
 
 import { isDefaultGreen } from "@/shared/prize-colors";
@@ -205,7 +206,7 @@ const drawPieLabel = ({
 
   if (imageAnchor) {
     // Ancla del texto = centro de la imagen + mitad altura imagen + hueco
-    const gap = geometry.radius * 0.045; // ~4.5% del radio
+    const gap = geometry.radius * 0.09; // ~9% del radio
     labelX = imageAnchor.centerX;
     labelY = imageAnchor.centerY + imageAnchor.height / 2 + gap;
     // Radio real de este punto (distancia al centro) para calcular cuerda
@@ -270,6 +271,7 @@ const drawPieLabel = ({
 
 /**
  * Dibuja la imagen del premio y devuelve su ancla y dimensiones en pantalla.
+ * Aplica tamaño adaptativo para evitar recortes por los bordes del sector.
  */
 const drawPieImage = ({
   context,
@@ -278,22 +280,38 @@ const drawPieImage = ({
   segmentStartAngle,
   anglePerSegment,
   style,
+  imageOptions,
 }: DrawPieImage): ImageAnchor | null => {
   const image = getOrRequestImage(pie.image);
   if (!image) return null;
+
+  // Usar opciones personalizadas o las del estilo por defecto
+  const imgOffset = imageOptions?.offset ?? style.image.offset;
+  const imgSize = imageOptions?.size ?? style.image.size;
 
   const midDeg = degreesToCanvasRadians(
     segmentStartAngle + anglePerSegment / 2,
   );
   const centerX =
-    geometry.center.x + geometry.radius * style.image.offset * Math.cos(midDeg);
+    geometry.center.x + geometry.radius * imgOffset * Math.cos(midDeg);
   const centerY =
-    geometry.center.y + geometry.radius * style.image.offset * Math.sin(midDeg);
+    geometry.center.y + geometry.radius * imgOffset * Math.sin(midDeg);
 
-  const box = geometry.radius * style.image.size;
+  const box = geometry.radius * imgSize;
+
+  // --- Tamaño adaptativo: limitar la caja para que quepa en el sector ---
+  // Ancho máximo del sector a la altura del centro de la imagen (cuerda).
+  // Usamos un factor de seguridad del 85% para evitar bordes recortados.
+  const sectorHalfAngleRad = (anglePerSegment / 2) * Math.PI / 180;
+  const chordAtCenter = 2 * geometry.radius * imgOffset * Math.sin(sectorHalfAngleRad);
+  const maxBox = chordAtCenter * 0.85;
+  const clampedBox = Math.min(box, maxBox);
+  // No permitir que la caja sea menor que un mínimo razonable
+  const finalBox = Math.max(clampedBox, geometry.radius * 0.08);
+
   const scale = Math.min(
-    box / image.naturalWidth,
-    box / image.naturalHeight,
+    finalBox / image.naturalWidth,
+    finalBox / image.naturalHeight,
   );
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
@@ -341,6 +359,7 @@ export interface DrawPieImage {
   segmentStartAngle: number;
   anglePerSegment: number;
   style: StyleOptionDefault;
+  imageOptions?: { offset: number; size: number };
 }
 
 export interface DrawPieLabel {
@@ -439,6 +458,62 @@ export interface DrawRoulette {
   style: StyleOptionDefault;
 }
 
+/** Opciones de dibujo de imagen por modo de etiqueta. */
+interface ImageDrawOptions {
+  offset: number;
+  size: number;
+}
+
+/** Devuelve las opciones de dibujo de imagen según labelMode, si hay imagen y si hay nombre. */
+const getImageDrawOptions = (
+  labelMode: LabelMode | null | undefined,
+  hasImage: boolean,
+  hasName: boolean,
+): ImageDrawOptions => {
+  // Default: offset 0.78, size 0.26 (deja espacio para texto debajo)
+  const defaultOffset = 0.78;
+  const defaultSize = 0.26;
+
+  // Si no hay nombre: imagen hacia el borde (como los otros modos), un poco más grande
+  // porque no necesita espacio para texto debajo.
+  if (!hasName && hasImage) {
+    return { offset: 0.76, size: 0.30 };
+  }
+
+  // Modo "win" con imagen: misma posición que sin nombre (hacia el borde, sin texto)
+  if (labelMode === "win" && hasImage) {
+    return { offset: 0.76, size: 0.30 };
+  }
+
+  // Modo "wheel" con imagen: offset un poco más centrado, mismo tamaño que sin nombre
+  if (labelMode === "wheel" && hasImage) {
+    return { offset: 0.65, size: 0.30 };
+  }
+
+  // Modo "both" con imagen: default
+  return { offset: defaultOffset, size: defaultSize };
+};
+
+/** Determina si se debe dibujar el label según labelMode y si hay nombre. */
+const shouldDrawLabel = (
+  labelMode: LabelMode | null | undefined,
+  hasImage: boolean,
+  hasName: boolean,
+): boolean => {
+  // Si no hay nombre, nunca dibujar label
+  if (!hasName) return false;
+
+  switch (labelMode) {
+    case "wheel":
+      return true; // Siempre mostrar en la ruleta
+    case "win":
+      return !hasImage; // Solo mostrar si NO hay imagen (fallback)
+    case "both":
+    default:
+      return true; // Mostrar siempre (comportamiento original)
+  }
+};
+
 export const drawRoulette = ({
   initialAngleOffset,
   context,
@@ -461,24 +536,20 @@ export const drawRoulette = ({
     const segmentStartAngle = (segmentEndAngle - anglePerSegment + 360) % 360;
     segmentEndAngle = segmentStartAngle;
 
+    const hasName = Boolean(pie.name && pie.name.trim());
+
     return {
       name: pie.name,
       bg,
       image: pie.image ?? null,
+      labelMode: pie.labelMode ?? "both",
+      hasName,
       // Los verdes de la paleta por defecto siempre llevan texto blanco;
       // cualquier otro fondo se resuelve con auto-contraste.
       color: pie.color || (isDefaultGreen(bg) ? "#FFFFFF" : getContrastColor(bg)),
       segmentStartAngle,
     };
   });
-
-  // Con imágenes, el nombre se acerca al centro (para dejar sitio a la imagen)
-  // y admite dos líneas. Sin imágenes se conserva el diseño original.
-  const hasImages = resolvedPieList.some((pie) => Boolean(pie.image));
-  const labelOffset = hasImages
-    ? Math.min(style.label.offset, 0.58)
-    : style.label.offset;
-  const labelMaxLines = hasImages ? 2 : 1;
 
   // PASO 1: Dibujar todos los sectores (fondos + bordes internos)
   for (const pie of resolvedPieList) {
@@ -493,9 +564,12 @@ export const drawRoulette = ({
   }
 
   // PASO 2: Dibujar todas las imágenes y capturar sus anclas
-  const imageAnchors = new Map<string, ImageAnchor | null>();
-  for (const pie of resolvedPieList) {
+  // Usando opciones de posición/tamaño según labelMode y si hay nombre
+  // Keyed por índice para soportar nombres vacíos/duplicados
+  const imageAnchors = new Map<number, ImageAnchor | null>();
+  resolvedPieList.forEach((pie, index) => {
     if (pie.image) {
+      const imageOpts = getImageDrawOptions(pie.labelMode, true, pie.hasName);
       const anchor = drawPieImage({
         context,
         geometry,
@@ -503,17 +577,28 @@ export const drawRoulette = ({
         segmentStartAngle: pie.segmentStartAngle,
         anglePerSegment,
         style,
+        imageOptions: imageOpts,
       });
-      imageAnchors.set(pie.name, anchor);
+      imageAnchors.set(index, anchor);
     } else {
-      imageAnchors.set(pie.name, null);
+      imageAnchors.set(index, null);
     }
-  }
+  });
 
   // PASO 3: Dibujar todos los textos encima de todo (sectores + imágenes)
   // Usando la ancla de la imagen (si existe) para colocar el texto debajo.
-  for (const pie of resolvedPieList) {
-    const imageAnchor = imageAnchors.get(pie.name) ?? null;
+  // Solo dibujar label si shouldDrawLabel lo permite.
+  // Cada premio usa su propio labelOffset/maxLines según si TIENE imagen.
+  resolvedPieList.forEach((pie, index) => {
+    if (!shouldDrawLabel(pie.labelMode, Boolean(pie.image), pie.hasName)) {
+      return;
+    }
+    const hasImage = Boolean(pie.image);
+    const labelOffset = hasImage
+      ? Math.min(style.label.offset, 0.58)
+      : style.label.offset;
+    const labelMaxLines = hasImage ? 2 : 1;
+    const imageAnchor = imageAnchors.get(index) ?? null;
     drawPieLabel({
       context,
       geometry,
@@ -525,7 +610,7 @@ export const drawRoulette = ({
       maxLines: labelMaxLines,
       imageAnchor,
     });
-  }
+  });
 
   // has border - borde exterior metálico
   if (

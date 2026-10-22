@@ -200,6 +200,7 @@ interface SpinResponse {
     backgroundColor: string;
     probability: number;
     imageUrl?: string | null;
+    labelMode?: "wheel" | "win" | "both";
   }[];
   rouletteId: number;
   demo?: boolean;
@@ -260,6 +261,7 @@ export const RouletteViewHook: React.FC = () => {
   const [hasSpun, setHasSpun] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastSpinWasDemo, setLastSpinWasDemo] = useState(false);
+  const [winnerLabelMode, setWinnerLabelMode] = useState<"wheel" | "win" | "both">("both");
   const isModalOpen = finalResult !== null;
 
   // Lee el token del fragmento, lo borra de la barra de direcciones y lo
@@ -371,12 +373,14 @@ export const RouletteViewHook: React.FC = () => {
             backgroundColor?: string;
             probability: number;
             imageUrl?: string | null;
+            labelMode?: "wheel" | "win" | "both";
           }[]
         ).map((p) => ({
           name: p.name,
           bg: p.backgroundColor || "#0a4e58",
           weight: p.probability,
           image: p.imageUrl ?? null,
+          labelMode: p.labelMode ?? "both",
         }));
         setRouletteItems(formattedPrizes);
       } catch (error) {
@@ -448,6 +452,7 @@ export const RouletteViewHook: React.FC = () => {
         bg: p.backgroundColor,
         weight: p.probability,
         image: p.imageUrl ?? null,
+        labelMode: p.labelMode ?? "both",
       }));
       setRouletteItems(formattedPrizes);
 
@@ -464,6 +469,7 @@ export const RouletteViewHook: React.FC = () => {
       setWinnerImage(
         winningPrize?.imageUrl ?? spinData.prizeImageUrl ?? null,
       );
+      setWinnerLabelMode(winningPrize?.labelMode ?? "both");
 
       controlsRef.current?.start(spinData.prizeIndex);
     } catch (err) {
@@ -485,12 +491,16 @@ export const RouletteViewHook: React.FC = () => {
   const handlePrizeWon = (prize: string) => {
     setFinalResult(prize);
     // Respaldo: si el servidor no envió la imagen, se busca en los premios.
+    const winningItem = rouletteItems?.find((item) => item.name === prize);
     setWinnerImage(
       (current) =>
-        current ?? rouletteItems?.find((item) => item.name === prize)?.image ?? null,
+        current ?? winningItem?.image ?? null,
     );
+    setWinnerLabelMode(winningItem?.labelMode ?? "both");
     soundManager.playWin();
   };
+
+  const hasWinnerName = finalResult && finalResult.trim().length > 0;
 
   const canSpin = (ticketState.kind === "valid" && !hasSpun) || ticketState.kind === "admin";
 
@@ -716,7 +726,11 @@ export const RouletteViewHook: React.FC = () => {
                   style={{ color: "#0f393f" }}
                 >
                   {finalResult
-                    ? finalResult
+                    ? (hasWinnerName
+                        ? (winnerLabelMode === "wheel" && winnerImage
+                            ? "¡Ganaste!"
+                            : finalResult)
+                        : "¡Ganaste!")
                     : ticketState.kind === "valid"
                     ? "Ticket válido"
                     : ticketState.kind === "admin"
@@ -729,7 +743,7 @@ export const RouletteViewHook: React.FC = () => {
                 >
                   {finalResult
                     ? lastSpinWasDemo
-                      ? `¡Giro de prueba! Premio: ${finalResult} (no consume ticket)`
+                      ? `¡Giro de prueba!${hasWinnerName ? ` Premio: ${finalResult}` : ""} (no consume ticket)`
                       : `¡Felicidades! Código: ${claimCode}`
                     : ticketState.kind === "valid"
                     ? "Pulsa GIRAR RULETA para participar."
@@ -1015,6 +1029,7 @@ export const RouletteViewHook: React.FC = () => {
             setFinalResult(null);
             setWinnerImage(null);
           }}
+          showName={hasWinnerName && (winnerLabelMode !== "wheel" || !winnerImage)}
         />
       )}
     </div>

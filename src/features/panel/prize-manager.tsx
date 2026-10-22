@@ -15,6 +15,8 @@ import {
 	SectionHeading,
 } from "./panel-ui";
 
+export type LabelMode = "wheel" | "win" | "both";
+
 export interface Prize {
 	roulette_id?: number;
 	name: string;
@@ -22,6 +24,8 @@ export interface Prize {
 	probability: number;
 	/** Imagen del premio como data URL comprimida (opcional). */
 	image?: string | null;
+	/** Dónde mostrar el nombre: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
+	labelMode?: LabelMode | null;
 }
 
 interface PrizeManagerProps {
@@ -32,9 +36,9 @@ interface PrizeManagerProps {
 
 /** Rejilla compartida por las filas de premio y la fila de alta. */
 const ROW_BASE =
-	"grid grid-cols-[2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem] items-center gap-2";
-const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem]`;
-const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto]`;
+	"grid grid-cols-[2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem_2.5rem] items-center gap-2";
+const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem]`;
+const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto_2.5rem]`;
 
 export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	templateId,
@@ -47,6 +51,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		backgroundColor: GREEN_PALETTE[0],
 		probability: 10,
 		image: null,
+		labelMode: "both",
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const toast = useToast();
@@ -98,7 +103,8 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	};
 
 	const handleAddPrize = () => {
-		if (newPrize.name.trim() === "") return;
+		// Permitir nombre vacío si hay imagen
+		if (newPrize.name.trim() === "" && !newPrize.image) return;
 		setPrizes([
 			...prizes,
 			{
@@ -112,6 +118,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			backgroundColor: nextGreen(prizes.length + 1),
 			probability: 10,
 			image: null,
+			labelMode: "both",
 		});
 	};
 
@@ -136,6 +143,9 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				}
 				if (field === "image") {
 					return { ...prize, image: value == null ? null : String(value) };
+				}
+				if (field === "labelMode") {
+					return { ...prize, labelMode: value as LabelMode | null };
 				}
 				return { ...prize, name: String(value) };
 			}),
@@ -169,7 +179,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				<SectionHeading
 					icon={Pencil}
 					title="Editar premios"
-					subtitle={`Sube una imagen por premio y luego toca en "Guardar cambios".`}
+					subtitle={`Sube una imagen por premio (el nombre es opcional si hay imagen) y luego toca en "Guardar cambios".`}
 				/>
 
 				<div className="mt-4 space-y-4">
@@ -199,9 +209,10 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 
 					{/* Lista de premios */}
 					<div className="space-y-2">
-						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
+						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
 							<span>Nombre</span>
 							<span className="text-center">Imagen</span>
+							<span className="text-center">Texto</span>
 							<span>Color</span>
 							<span>Peso</span>
 							<span className="text-center">Real</span>
@@ -230,6 +241,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 												handlePrizeChange(index, "name", e.target.value)
 											}
 											className="h-9"
+											placeholder={prize.image ? "Opcional (tiene imagen)" : "Nombre del premio"}
 											aria-label={`Nombre del premio ${index + 1}`}
 										/>
 									</div>
@@ -239,6 +251,21 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 										label={`premio ${index + 1}`}
 										className="justify-self-center md:justify-self-start"
 									/>
+									<div className="flex items-center justify-center">
+										<select
+											id={`prize-labelmode-${index}`}
+											value={prize.labelMode ?? "both"}
+											onChange={(e) =>
+												handlePrizeChange(index, "labelMode", e.target.value)
+											}
+											className="h-9 w-full max-w-[120px] text-xs text-center rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-slate-800 shadow-sm outline-none focus:border-[#005f63] focus:ring-2 focus:ring-[#005f63]/25"
+											aria-label={`Modo de texto del premio ${index + 1}`}
+										>
+											<option value="wheel">En la ruleta</option>
+											<option value="win">Solo al ganar</option>
+											<option value="both">Ambos</option>
+										</select>
+									</div>
 									<BrandColorInput
 										id={`prize-color-${index}`}
 										value={prize.backgroundColor}
@@ -294,7 +321,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 								<BrandInput
 									id="new-prize-name"
 									type="text"
-									placeholder="Nombre del nuevo premio"
+									placeholder={newPrize.image ? "Opcional (tiene imagen)" : "Nombre del nuevo premio"}
 									value={newPrize.name}
 									onChange={(e) =>
 										setNewPrize({ ...newPrize, name: e.target.value })
@@ -309,6 +336,21 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 								label="nuevo premio"
 								className="justify-self-center md:justify-self-start"
 							/>
+							<div className="flex items-center justify-center">
+								<select
+									id="new-prize-labelmode"
+									value={newPrize.labelMode ?? "both"}
+									onChange={(e) =>
+										setNewPrize({ ...newPrize, labelMode: e.target.value as LabelMode })
+									}
+									className="h-9 w-full max-w-[120px] text-xs text-center rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-slate-800 shadow-sm outline-none focus:border-[#005f63] focus:ring-2 focus:ring-[#005f63]/25"
+									aria-label="Modo de texto del nuevo premio"
+								>
+									<option value="wheel">En la ruleta</option>
+									<option value="win">Solo al ganar</option>
+									<option value="both">Ambos</option>
+								</select>
+							</div>
 							<BrandColorInput
 								id="new-prize-color"
 								value={newPrize.backgroundColor}

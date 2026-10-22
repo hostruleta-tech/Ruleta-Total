@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Search, Download, ChevronLeft, ChevronRight, Loader2, Filter } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "./panel-toast";
 import {
@@ -194,14 +194,20 @@ export function RedeemedManager() {
 			{globalStats && (
 				<div className="mt-4 flex flex-wrap gap-2">
 					{[
-						{ label: "Total", value: globalStats.total, color: "bg-slate-100 text-slate-700" },
-						{ label: "Canjeados", value: globalStats.redeemed, color: "bg-[#005f63]/10 text-[#005f63]" },
-						{ label: "Disponibles", value: globalStats.available, color: "bg-green-100 text-green-700" },
-						{ label: "Reservados", value: globalStats.reserved, color: "bg-amber-100 text-amber-700" },
-						{ label: "Vencidos", value: globalStats.expired, color: "bg-[#E52421]/10 text-[#c81d1a]" },
-						{ label: "Anulados", value: globalStats.void, color: "bg-slate-200 text-slate-500" },
+						{ label: "Total", value: globalStats.total, color: "bg-slate-100 text-slate-700 border-slate-200" },
+						{ label: "Canjeados", value: globalStats.redeemed, color: "bg-[#005f63]/10 text-[#005f63] border-[#005f63]/20" },
+						{ label: "Disponibles", value: globalStats.available, color: "bg-green-100 text-green-700 border-green-200" },
+						{ label: "Reservados", value: globalStats.reserved, color: "bg-amber-100 text-amber-700 border-amber-200" },
+						{ label: "Vencidos", value: globalStats.expired, color: "bg-[#E52421]/10 text-[#c81d1a] border-[#E52421]/20" },
+						{ label: "Anulados", value: globalStats.void, color: "bg-slate-100 text-slate-500 border-slate-200" },
 					].map((stat) => (
-						<span key={stat.label} className={cn("rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide", stat.color)}>
+						<span
+							key={stat.label}
+							className={cn(
+								"inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide border",
+								stat.color
+							)}
+						>
 							{stat.value} {stat.label.toLowerCase()}
 						</span>
 					))}
@@ -223,11 +229,12 @@ export function RedeemedManager() {
 				</div>
 
 				{/* Filtro por lote */}
-				<div className="w-full sm:w-[220px]">
+				<div className="w-full sm:w-[220px] relative">
+					<Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
 					<select
 						value={selectedBatchId}
 						onChange={(e) => setSelectedBatchId(e.target.value)}
-						className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#005f63]/20"
+						className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#005f63]/20 appearance-none cursor-pointer"
 					>
 						<option value="all">Todos los lotes</option>
 						{batches.map((batch) => (
@@ -236,6 +243,9 @@ export function RedeemedManager() {
 							</option>
 						))}
 					</select>
+					<svg className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+						<path d="M6 9l6 6 6-6" />
+					</svg>
 				</div>
 
 				{/* Exportar CSV */}
@@ -272,19 +282,19 @@ export function RedeemedManager() {
 							<table className="w-full text-sm" role="grid">
 								<thead className="bg-slate-50/50">
 									<tr>
-										<th className="px-3 py-2 text-left font-bold text-slate-600">Código</th>
-										<th className="px-3 py-2 text-left font-bold text-slate-600">Lote</th>
-										<th className="px-3 py-2 text-left font-bold text-slate-600">Premio</th>
-										<th className="px-3 py-2 text-left font-bold text-slate-600">Fecha de canje</th>
+										<th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-200">Código</th>
+										<th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-200">Lote</th>
+										<th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-200">Premio</th>
+										<th className="px-4 py-3 text-left font-bold text-slate-600 border-b border-slate-200">Fecha de canje</th>
 									</tr>
 								</thead>
 								<tbody className="divide-y divide-slate-100">
 									{tickets.map((ticket) => (
-										<tr key={ticket.id} className="hover:bg-slate-50/50">
-											<td className="px-3 py-2 font-mono font-bold text-slate-800">{shortId(ticket.id)}</td>
-											<td className="px-3 py-2 text-slate-600">{ticket.batchLabel || `Lote ${shortId(ticket.batchId ?? "")}`}</td>
-											<td className="px-3 py-2 font-medium text-slate-800">{ticket.prizeName || "—"}</td>
-											<td className="px-3 py-2 text-slate-500">{formatDate(ticket.redeemedAt)}</td>
+										<tr key={ticket.id} className="hover:bg-slate-50/50 transition-colors">
+											<td className="px-4 py-3 font-mono font-bold text-slate-800">#{shortId(ticket.id)}</td>
+											<td className="px-4 py-3 text-slate-600">{ticket.batchLabel || `Lote ${shortId(ticket.batchId ?? "")}`}</td>
+											<td className="px-4 py-3 font-medium text-slate-800">{ticket.prizeName || "—"}</td>
+											<td className="px-4 py-3 text-slate-500 whitespace-nowrap">{formatDate(ticket.redeemedAt)}</td>
 										</tr>
 									))}
 								</tbody>
@@ -292,7 +302,7 @@ export function RedeemedManager() {
 						</div>
 
 						{totalPages > 1 && (
-							<div className="mt-4 flex items-center justify-between">
+							<div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
 								<p className="text-sm font-medium text-slate-500">
 									Página {currentPage} de {totalPages} · {total} {total === 1 ? "registro" : "registros"}
 								</p>

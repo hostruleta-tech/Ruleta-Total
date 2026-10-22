@@ -9,6 +9,7 @@ import {
   getRouletteWithPrizes,
   setActiveRoulette,
   type Prize,
+  type LabelMode,
   updateRoulette,
 } from "./database";
 import { requireOperator } from "./auth/session";
@@ -47,13 +48,19 @@ function sanitizePrizes(raw: unknown): Prize[] {
     throw new ValidationError("La lista de premios no es válida.");
   }
 
+  const validLabelModes: LabelMode[] = ["wheel", "win", "both"];
+
   return raw.map((item, index) => {
     const candidate = (item ?? {}) as Partial<Prize>;
     const position = index + 1;
 
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
-    if (!name) {
-      throw new ValidationError(`El premio ${position} necesita un nombre.`);
+    const hasImage = candidate.image != null && candidate.image !== "";
+
+    if (!name && !hasImage) {
+      throw new ValidationError(
+        `El premio ${position} necesita un nombre o una imagen.`,
+      );
     }
 
     const backgroundColor =
@@ -70,7 +77,7 @@ function sanitizePrizes(raw: unknown): Prize[] {
     }
 
     let image: string | null = null;
-    if (candidate.image != null && candidate.image !== "") {
+    if (hasImage) {
       if (
         typeof candidate.image !== "string" ||
         !PRIZE_IMAGE_DATA_URL.test(candidate.image)
@@ -87,12 +94,23 @@ function sanitizePrizes(raw: unknown): Prize[] {
       image = candidate.image;
     }
 
+    let labelMode: LabelMode = "both";
+    if (candidate.labelMode != null) {
+      if (!validLabelModes.includes(candidate.labelMode)) {
+        throw new ValidationError(
+          `El modo de texto del premio ${position} no es válido (wheel, win o both).`,
+        );
+      }
+      labelMode = candidate.labelMode;
+    }
+
     return {
       roulette_id: Number(candidate.roulette_id) || 0,
       name,
       backgroundColor,
       probability,
       image,
+      labelMode,
     };
   });
 }
@@ -105,6 +123,7 @@ function toPublicPrize(prize: Prize) {
     backgroundColor: prize.backgroundColor,
     probability: prize.probability,
     imageUrl: prize.imageUrl ?? null,
+    labelMode: prize.labelMode ?? "both",
   };
 }
 
