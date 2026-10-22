@@ -1,11 +1,12 @@
-import { Pencil, Plus, TrashIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { GripVertical, Pencil, Plus, TrashIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/shared/api";
 import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
 import { PrizeImageInput } from "./prize-image-input";
 import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
+import { cn } from "@/shared/lib/utils";
 import {
 	BrandButton,
 	BrandCard,
@@ -38,9 +39,9 @@ interface PrizeManagerProps {
 
 /** Rejilla compartida por las filas de premio y la fila de alta. */
 const ROW_BASE =
-	"grid grid-cols-[2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem_2.5rem] items-center gap-2";
-const ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem]`;
-const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto_2.5rem]`;
+	"grid grid-cols-[2rem_2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem_2.5rem] items-center gap-2";
+const ROW_GRID = `${ROW_BASE} md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem]`;
+const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto_2.5rem]`;
 
 export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	templateId,
@@ -57,6 +58,8 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		isSpinAgain: false,
 	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const dragOverIndex = useRef<number | null>(null);
 	const toast = useToast();
 	const { operatorFetch } = useOperatorAuth();
 
@@ -128,6 +131,33 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 
 	const handleRemovePrize = (index: number) => {
 		setPrizes(prizes.filter((_, i) => i !== index));
+	};
+
+	const handleDragStart = (index: number) => {
+		setDragIndex(index);
+	};
+
+	const handleDragOver = (e: React.DragEvent, index: number) => {
+		e.preventDefault();
+		dragOverIndex.current = index;
+	};
+
+	const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+		e.preventDefault();
+		if (dragIndex === null || dragIndex === dropIndex) return;
+		setPrizes((prev) => {
+			const updated = [...prev];
+			const [moved] = updated.splice(dragIndex, 1);
+			updated.splice(dropIndex, 0, moved);
+			return updated;
+		});
+		setDragIndex(null);
+		dragOverIndex.current = null;
+	};
+
+	const handleDragEnd = () => {
+		setDragIndex(null);
+		dragOverIndex.current = null;
 	};
 
 	const handlePrizeChange = (
@@ -216,7 +246,8 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 
 					{/* Lista de premios */}
 					<div className="space-y-2">
-						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
+						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
+							<span></span>
 							<span>Nombre</span>
 							<span className="text-center">Imagen</span>
 							<span className="text-center">Texto</span>
@@ -237,8 +268,27 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 								<div
 									// biome-ignore lint/suspicious/noArrayIndexKey: es la manera de identificar
 									key={index}
-									className={`${ROW_GRID} py-2 md:py-1.5`}
+									className={`${ROW_GRID} py-2 md:py-1.5 ${
+										dragIndex === index ? "opacity-40" : ""
+									} ${
+										dragOverIndex.current === index
+											? "bg-teal-100"
+											: ""
+									}`}
+									draggable
+									onDragStart={() => handleDragStart(index)}
+									onDragOver={(e) => handleDragOver(e, index)}
+									onDrop={(e) => handleDrop(e, index)}
+									onDragEnd={handleDragEnd}
 								>
+									<button
+										type="button"
+										className="flex h-9 w-full cursor-grab items-center justify-center text-slate-400 hover:text-slate-600 active:cursor-grabbing"
+										aria-label={`Reordenar premio ${index + 1}`}
+										tabIndex={-1}
+									>
+										<GripVertical className="h-4 w-4" />
+									</button>
 									<div className="col-span-5 md:col-span-1">
 										<BrandInput
 											id={`prize-name-${index}`}
@@ -342,6 +392,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 					{/* Agregar nuevo premio */}
 					<div className="rounded-2xl border border-dashed border-[#005f63]/40 bg-[#005f63]/5 p-2.5 md:p-3">
 						<div className={ADD_ROW_GRID}>
+							<div className="h-9" />
 							<div className="col-span-5 md:col-span-1">
 								<BrandInput
 									id="new-prize-name"

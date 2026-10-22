@@ -385,6 +385,46 @@ const darkenColor = (hex: string, amount: number): string => {
   return `#${to(r)}${to(g)}${to(b)}`;
 };
 
+/**
+ * Calcula el factor de oscurecimiento adaptativo según la luminosidad del color.
+ * - Colores muy claros (luminancia > 0.8): 15% (muy sutil, evita bordes grisáceos en blancos/amarillos)
+ * - Colores claros (luminancia 0.5-0.8): 25%
+ * - Colores medios/oscuros (luminancia < 0.5): 35% (efecto 3D completo)
+ */
+const getAdaptiveDarkenAmount = (hex: string): number => {
+  const c = hex.replace("#", "");
+  const normalized =
+    c.length === 3
+      ? c
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : c;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return 0.35; // fallback
+  }
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+
+  // Luminancia relativa (sRGB)
+  const channelLuminance = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance =
+    0.2126 * channelLuminance(r) +
+    0.7152 * channelLuminance(g) +
+    0.0722 * channelLuminance(b);
+
+  // Interpolación: 15% en luminance=1.0 (blanco puro) → 35% en luminance=0
+  if (luminance > 0.8) return 0.15;      // Muy claros: blanco, amarillo claro, celeste claro
+  if (luminance > 0.5) return 0.25;      // Claros: verde claro, naranja claro, etc.
+  return 0.35;                           // Medios/oscuros: efecto 3D completo
+};
+
 export const drawPie = ({
   context,
   geometry,
@@ -396,8 +436,8 @@ export const drawPie = ({
   const startDeg = degreesToCanvasRadians(segmentStartAngle);
   const endDeg = degreesToCanvasRadians(segmentStartAngle + anglePerSegment);
 
-  // Gradiente radial: color original en el centro → versión oscura en el borde
-  const darker = darkenColor(pie.bg, 0.35);
+  // Gradiente radial: color original en el centro → versión oscura en el borde (adaptativo)
+  const darker = darkenColor(pie.bg, getAdaptiveDarkenAmount(pie.bg));
   const grad = context.createRadialGradient(
     geometry.center.x, geometry.center.y, 0,
     geometry.center.x, geometry.center.y, geometry.radius
@@ -481,23 +521,23 @@ const getImageDrawOptions = (
   hasImage: boolean,
   hasName: boolean,
 ): ImageDrawOptions => {
-  // Default: offset 0.83, size 0.28 (imagen más arriba, tamaño ligeramente mayor)
-  const defaultOffset = 0.83;
-  const defaultSize = 0.28;
+  // Default: offset 0.78, size 0.35 (imagen un 5% más hacia afuera)
+  const defaultOffset = 0.78;
+  const defaultSize = 0.35;
 
-  // Si no hay nombre: imagen hacia el borde, un poco más grande
+  // Si no hay nombre: imagen un 5% más hacia afuera
   if (!hasName && hasImage) {
-    return { offset: 0.82, size: 0.30 };
+    return { offset: 0.77, size: 0.38 };
   }
 
-  // Modo "win" con imagen: misma posición que sin nombre (hacia el borde, sin texto)
+  // Modo "win" con imagen: misma posición que sin nombre
   if (labelMode === "win" && hasImage) {
-    return { offset: 0.82, size: 0.30 };
+    return { offset: 0.77, size: 0.38 };
   }
 
-  // Modo "wheel" con imagen: offset un poco más centrado, mismo tamaño que sin nombre
+  // Modo "wheel" con imagen: un 5% más hacia afuera
   if (labelMode === "wheel" && hasImage) {
-    return { offset: 0.72, size: 0.30 };
+    return { offset: 0.67, size: 0.38 };
   }
 
   // Modo "both" con imagen: default
@@ -612,7 +652,7 @@ export const drawRoulette = ({
     }
     const hasImage = Boolean(pie.image);
     const labelOffset = hasImage
-      ? Math.min(style.label.offset, 0.58)
+      ? Math.min(style.label.offset, 0.51)
       : style.label.offset;
     const labelMaxLines = hasImage ? 2 : 1;
     const imageAnchor = imageAnchors.get(index) ?? null;
@@ -740,7 +780,7 @@ export const drawRouletteContent = ({
     }
     const hasImage = Boolean(pie.image);
     const labelOffset = hasImage
-      ? Math.min(style.label.offset, 0.58)
+      ? Math.min(style.label.offset, 0.51)
       : style.label.offset;
     const labelMaxLines = hasImage ? 2 : 1;
     drawPieLabel({

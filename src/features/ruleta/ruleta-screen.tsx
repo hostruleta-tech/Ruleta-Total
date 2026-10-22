@@ -91,7 +91,7 @@ const RouletteGame: React.FC<{
       style: {
         canvas: { bg: "#ffffff" },
         label: {
-          font: `800 ${Math.max(11, Math.round(size * 0.042))}px ${APP_FONT_FAMILY}`,
+          font: `800 ${Math.max(14, Math.round(size * 0.05))}px ${APP_FONT_FAMILY}`,
           align: "center",
           baseline: "middle",
           offset: 0.7,
