@@ -700,7 +700,7 @@ export const drawRoulette = ({
       imageAnchor,
       imgOffset: params.imgOffset,
       midDeg: params.midDeg,
-      vertical: !hasImage,
+      vertical: false,
     });
   });
 
@@ -827,7 +827,7 @@ export const drawRouletteContent = ({
       imageAnchor: null,
       imgOffset: style.label.offset,
       midDeg: 0,
-      vertical: !hasImage,
+      vertical: false,
     });
   });
 
@@ -887,6 +887,7 @@ export const drawRouletteContent = ({
  * Dibuja el nombre del premio actual (bajo el puntero) en vertical,
  * fijo en la pantalla (no gira con la ruleta), desde el centro hacia
  * el borde exterior en la dirección del puntero.
+ * Cada carácter se posiciona individualmente a lo largo del radio.
  */
 export const drawFixedVerticalLabel = ({
   context,
@@ -934,7 +935,7 @@ export const drawFixedVerticalLabel = ({
   const outerRadius = radius * (1 - outerMargin);
   const availableHeight = outerRadius - innerRadius;
 
-  // Ángulo del puntero en radianes de canvas
+  // Ángulo del puntero en radianes de canvas (90° = arriba)
   const pointerRad = degreesToCanvasRadians(pointerAngle);
 
   // Texto en vertical (caracteres apilados)
@@ -952,21 +953,28 @@ export const drawFixedVerticalLabel = ({
     fontSize = Math.max(10, fontSize - 1);
   }
 
+  const finalLineHeight = fontSize * 1.15;
+  const totalHeight = chars.length * finalLineHeight;
+  const startY = innerRadius + (availableHeight - totalHeight) / 2;
+
   context.save();
-  context.setTransform(1, 0, 0, 1, center.x, center.y);
-  // Rotar al ángulo del puntero
-  context.rotate(pointerRad);
+  // NO rotar el contexto. En su lugar, calcular la posición absoluta de cada carácter.
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = style.label.defaultColor || "#FFFFFF";
   context.font = withFontSize(style.label.font, fontSize);
 
-  const finalLineHeight = fontSize * 1.15;
-  const totalHeight = chars.length * finalLineHeight;
-  const startY = innerRadius + (availableHeight - totalHeight) / 2;
+  // Vector unitario en la dirección del puntero
+  const dirX = Math.cos(pointerRad);
+  const dirY = Math.sin(pointerRad);
 
   chars.forEach((char, idx) => {
-    context.fillText(char, 0, startY + idx * finalLineHeight + finalLineHeight / 2);
+    // Distancia desde el centro para este carácter
+    const distFromCenter = startY + idx * finalLineHeight + finalLineHeight / 2;
+    // Posición absoluta en el canvas
+    const charX = center.x + dirX * distFromCenter;
+    const charY = center.y + dirY * distFromCenter;
+    context.fillText(char, charX, charY);
   });
 
   context.restore();
