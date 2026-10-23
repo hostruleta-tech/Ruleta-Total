@@ -297,16 +297,17 @@ const drawPieLabel = ({
     // Paso garantizado para que la frase completa quepa en la banda radial.
     const radialStep = Math.min(radialFontSize * CHAR_SPACING, maxStep);
 
-    // --- Layout B: líneas horizontales apiladas a lo ancho del sector ---
-    // El bloque gira con la casilla; con el premio arriba el texto queda
-    // perfectamente horizontal ("INTÉNTALO" / "DE NUEVO") y las letras pueden
-    // ser mucho más grandes, porque cada línea se ajusta a la cuerda del sector
-    // en lugar de a la longitud de una sola columna radial.
+    // --- Layout B: 2 líneas con la ORIENTACIÓN ORIGINAL (papel girado) ---
+    // Misma rotación de letra que la columna radial clásica (blockRotation):
+    // cada carácter se lee a lo largo del radio, con la línea de escritura
+    // girada, "como un papel volteado verticalmente". El salto de línea apila
+    // las líneas una al lado de la otra (a lo ancho del sector), de modo que
+    // cada una puede usar toda la banda radial y las letras salen más grandes.
     const lines = splitPrizeLines(name, 2);
     const lineCount = lines.length;
-    const innerBand = geometry.radius * 0.32;
-    const outerBand = geometry.radius * 0.93;
-    const blockCenterR = geometry.radius * 0.72;
+    const innerBand = geometry.radius * 0.33;
+    const outerBand = geometry.radius * 0.92;
+    const blockCenterR = geometry.radius * 0.70;
     const H_RATIO = 1.15;
     const MIN_FONT = 8;
     const capFont = Math.min(baseSize * 2.4, geometry.radius * 0.135);
@@ -316,55 +317,58 @@ const drawPieLabel = ({
     const REF_FONT = 100;
     context.font = withFontSize(style.label.font, REF_FONT);
     const lineRefWidths = lines.map((line) => context.measureText(line).width);
+    // Media línea más ancha (en unidades de la fuente de referencia).
+    const halfRefWidth = Math.max(...lineRefWidths) / 2;
 
-    let tangentialFontSize = capFont;
+    let layoutBFontSize = capFont;
     for (let iter = 0; iter < 12; iter += 1) {
-      const lineHeight = tangentialFontSize * H_RATIO;
-      const freeOut = outerBand - blockCenterR;
-      const freeIn = blockCenterR - innerBand;
-      // Tope por altura: el bloque de líneas debe caber en la banda radial.
-      const heightFont = (2 * Math.min(freeOut, freeIn)) / (lineCount * H_RATIO);
+      // Tope por ancho: el texto (centrado en blockCenterR) debe caber dentro
+      // de la banda radial [innerBand, outerBand].
+      const marginInner = blockCenterR - innerBand;
+      const marginOuter = outerBand - blockCenterR;
+      const widthFont =
+        (Math.min(marginInner, marginOuter) * REF_FONT) / halfRefWidth;
 
-      // Tope por ancho: cada línea debe caber en la cuerda de su sector.
-      let widthFont = Infinity;
-      for (let index = 0; index < lineCount; index += 1) {
-        const radius = blockCenterR + (0.5 * (lineCount - 1) - index) * lineHeight;
-        const chord = 2 * radius * Math.sin(segHalfRad) * 0.92;
-        widthFont = Math.min(widthFont, (chord / lineRefWidths[index]) * REF_FONT);
-      }
+      // Tope por altura: el bloque de líneas (apiladas a lo ancho del sector)
+      // debe caber en la cuerda del sector en el borde interior del texto.
+      const halfWidth = (halfRefWidth / REF_FONT) * layoutBFontSize;
+      const xLow = blockCenterR - halfWidth;
+      const chordLow =
+        xLow > 0 ? 2 * xLow * Math.sin(segHalfRad) * 0.9 : 0;
+      const heightFont =
+        chordLow > 0 ? chordLow / (lineCount * H_RATIO) : MIN_FONT;
 
-      const next = Math.max(MIN_FONT, Math.min(capFont, heightFont, widthFont));
-      if (Math.abs(next - tangentialFontSize) < 0.5) {
-        tangentialFontSize = next;
+      const next = Math.max(MIN_FONT, Math.min(capFont, widthFont, heightFont));
+      if (Math.abs(next - layoutBFontSize) < 0.5) {
+        layoutBFontSize = next;
         break;
       }
-      tangentialFontSize = next;
+      layoutBFontSize = next;
     }
 
     // Sólo se usa el layout B si realmente logra letras más grandes que la
     // columna radial clásica (textos cortos suelen ir mejor en columna).
-    if (tangentialFontSize >= radialFontSize) {
-      // Rotación para que cada línea lea a lo ancho del sector: con la casilla
-      // arriba (dir=(0,-1)) la rotación es 0 y el texto queda horizontal.
-      const tangentRotation = Math.atan2(dirX, -dirY);
+    if (layoutBFontSize >= radialFontSize) {
+      // Las líneas leen a lo largo del radio (misma orientación que siempre) y
+      // se apilan a lo ancho del sector; con la casilla arriba quedan como
+      // dos columnas verticales del estilo original ("INTÉNTALO" | "DE NUEVO").
+      const blockRotation = Math.atan2(dirX, -dirY) - Math.PI / 2;
 
       context.save();
       context.translate(geometry.center.x, geometry.center.y);
-      context.rotate(tangentRotation);
+      context.rotate(blockRotation);
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillStyle = pie.color;
-      context.font = withFontSize(style.label.font, tangentialFontSize);
+      context.font = withFontSize(style.label.font, layoutBFontSize);
 
-      const lineHeight = tangentialFontSize * H_RATIO;
+      const lineHeight = layoutBFontSize * H_RATIO;
+      const maxTextWidth = outerBand - innerBand;
       lines.forEach((line, index) => {
-        // Línea 0 en la parte exterior (junto al puntero), las demás hacia dentro.
-        const radius = blockCenterR + (0.5 * (lineCount - 1) - index) * lineHeight;
-        const chord = 2 * radius * Math.sin(segHalfRad) * 0.92;
-        const text = chord > 0 ? truncateText(context, line, chord) : line;
-        // En este sistema local, +Y apunta hacia el centro de la ruleta:
-        // dibujar en -radius sitúa la línea a la distancia `radius` del centro.
-        context.fillText(text, 0, -radius);
+        // Línea 0 hacia un lado de la diagonal central, las demás al otro lado.
+        const yOffset = (index - (lineCount - 1) / 2) * lineHeight;
+        const text = maxTextWidth > 0 ? truncateText(context, line, maxTextWidth) : line;
+        context.fillText(text, blockCenterR, yOffset);
       });
 
       context.restore();
