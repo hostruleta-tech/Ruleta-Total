@@ -232,7 +232,7 @@ const drawPieLabel = ({
 
     // Ajustar fontSize y paso para que la frase COMPLETA siempre quepa (sin recortes)
     // --- Parámetros de legibilidad ---
-    const CHAR_SPACING = 1.0;   // letras juntas (sin separación extra)
+    const CHAR_SPACING = 0.93;  // letras un poco más juntas (antes 1.0)
     const WIDE_CHAR = 0.85;     // ancho máx. aprox. de una letra vs fontSize
 
     // Tope por ancho del sector (cuerda interior, la zona más angosta)
@@ -243,7 +243,7 @@ const drawPieLabel = ({
     const maxStep = radialLength / chars.length;
 
     // Tamaño más grande posible: ni del objetivo, ni del sector, ni del que permita la frase completa
-    let fontSize = Math.min(baseSize * 1.6, maxFontByChord, maxStep / CHAR_SPACING);
+    let fontSize = Math.min(baseSize * 2.0, maxFontByChord, maxStep / CHAR_SPACING);
     let step = fontSize * CHAR_SPACING;
 
     // Redondeo de seguridad: si por decimales aún sobra, compactar exacto
