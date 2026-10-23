@@ -182,6 +182,53 @@ const truncateText = (
 };
 
 /**
+ * Divide el texto en a lo más `maxLines` líneas (por espacios), eligiendo los
+ * cortes que hacen lo más corta posible la línea más larga. Así un premio se
+ * puede mostrar en dos líneas con letras más grandes ("INTÉNTALO / DE NUEVO").
+ */
+const splitPrizeLines = (text: string, maxLines: number): string[] => {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return [words[0] ?? ""];
+  if (maxLines <= 1) return [words.join(" ")];
+
+  let best: string[] = [words.join(" ")];
+  let bestScore = Infinity;
+
+  const evaluate = (cuts: number[]) => {
+    const result: string[] = [];
+    let start = 0;
+    for (const cut of [...cuts, words.length]) {
+      result.push(words.slice(start, cut).join(" "));
+      start = cut;
+    }
+    const score = Math.max(...result.map((line) => line.length));
+    if (score < bestScore) {
+      bestScore = score;
+      best = result;
+    }
+  };
+
+  // Prueba combinaciones de cortes crecientes (máx. maxLines-1 cortes).
+  const cuts: number[] = [];
+  const generate = (minCut: number, remaining: number) => {
+    if (remaining === 0) {
+      evaluate(cuts);
+      return;
+    }
+    for (let cut = minCut; cut < words.length; cut += 1) {
+      cuts.push(cut);
+      generate(cut + 1, remaining - 1);
+      cuts.pop();
+    }
+  };
+  for (let count = 1; count <= Math.min(maxLines - 1, words.length - 1); count += 1) {
+    generate(1, count);
+  }
+
+  return best;
+};
+
+/**
  * Dibuja el nombre del premio.
  * - Si radial=true (premio SIN imagen): distribuye los caracteres a lo largo
  *   del radio del sector (desde zona interior hacia el borde exterior),
@@ -222,49 +269,121 @@ const drawPieLabel = ({
     void imageAnchor;
     void imgOffset;
     void midDeg;
-    const chars = [...pie.name.trim()];
-    if (chars.length === 0) return;
+
+    const name = pie.name.trim();
+    if (!name) return;
+    const chars = [...name];
 
     // Zona radial disponible: desde fuera del logo central (≈0.30R) hasta antes del borde (≈0.95R)
     const innerRadius = geometry.radius * 0.30;
     const outerRadius = geometry.radius * 0.95;
     const radialLength = outerRadius - innerRadius;
 
-    // Ajustar fontSize y paso para que la frase COMPLETA siempre quepa (sin recortes)
-    // --- Parámetros de legibilidad ---
-    const CHAR_SPACING = 0.93;  // letras un poco más juntas (antes 1.0)
+    // Ángulo del sector en radianes (media abertura)
+    const segHalfRad = (anglePerSegment * Math.PI) / 360;
+
+    // --- Layout A: columna radial clásica (un carácter tras otro por el radio) ---
+    // Parámetros de legibilidad
+    const CHAR_SPACING = 0.93;  // letras un poco más juntas
     const WIDE_CHAR = 0.85;     // ancho máx. aprox. de una letra vs fontSize
-
-    // Tope por ancho del sector (cuerda interior, la zona más angosta)
-    const innerChord = 2 * innerRadius * Math.sin((anglePerSegment * Math.PI) / 360);
+    const innerChord = 2 * innerRadius * Math.sin(segHalfRad);
     const maxFontByChord = Math.max(9, (innerChord * 0.92) / WIDE_CHAR);
-
-    // Paso máximo que garantiza que la frase completa cabe en radialLength
     const maxStep = radialLength / chars.length;
+    const radialFontSize = Math.min(
+      baseSize * 2.0,
+      maxFontByChord,
+      maxStep / CHAR_SPACING,
+    );
+    // Paso garantizado para que la frase completa quepa en la banda radial.
+    const radialStep = Math.min(radialFontSize * CHAR_SPACING, maxStep);
 
-    // Tamaño más grande posible: ni del objetivo, ni del sector, ni del que permita la frase completa
-    let fontSize = Math.min(baseSize * 2.0, maxFontByChord, maxStep / CHAR_SPACING);
-    let step = fontSize * CHAR_SPACING;
+    // --- Layout B: líneas horizontales apiladas a lo ancho del sector ---
+    // El bloque gira con la casilla; con el premio arriba el texto queda
+    // perfectamente horizontal ("INTÉNTALO" / "DE NUEVO") y las letras pueden
+    // ser mucho más grandes, porque cada línea se ajusta a la cuerda del sector
+    // en lugar de a la longitud de una sola columna radial.
+    const lines = splitPrizeLines(name, 2);
+    const lineCount = lines.length;
+    const innerBand = geometry.radius * 0.32;
+    const outerBand = geometry.radius * 0.93;
+    const blockCenterR = geometry.radius * 0.72;
+    const H_RATIO = 1.15;
+    const MIN_FONT = 8;
+    const capFont = Math.min(baseSize * 2.4, geometry.radius * 0.135);
 
-    // Redondeo de seguridad: si por decimales aún sobra, compactar exacto
-    if (chars.length * step > radialLength) {
-      step = radialLength / chars.length;
-      fontSize = step; // evita solape (paso ≥ alto de letra)
+    // Anchos de cada línea medidos con una fuente de referencia
+    // (la medida escala de forma lineal con el fontSize).
+    const REF_FONT = 100;
+    context.font = withFontSize(style.label.font, REF_FONT);
+    const lineRefWidths = lines.map((line) => context.measureText(line).width);
+
+    let tangentialFontSize = capFont;
+    for (let iter = 0; iter < 12; iter += 1) {
+      const lineHeight = tangentialFontSize * H_RATIO;
+      const freeOut = outerBand - blockCenterR;
+      const freeIn = blockCenterR - innerBand;
+      // Tope por altura: el bloque de líneas debe caber en la banda radial.
+      const heightFont = (2 * Math.min(freeOut, freeIn)) / (lineCount * H_RATIO);
+
+      // Tope por ancho: cada línea debe caber en la cuerda de su sector.
+      let widthFont = Infinity;
+      for (let index = 0; index < lineCount; index += 1) {
+        const radius = blockCenterR + (0.5 * (lineCount - 1) - index) * lineHeight;
+        const chord = 2 * radius * Math.sin(segHalfRad) * 0.92;
+        widthFont = Math.min(widthFont, (chord / lineRefWidths[index]) * REF_FONT);
+      }
+
+      const next = Math.max(MIN_FONT, Math.min(capFont, heightFont, widthFont));
+      if (Math.abs(next - tangentialFontSize) < 0.5) {
+        tangentialFontSize = next;
+        break;
+      }
+      tangentialFontSize = next;
     }
 
+    // Sólo se usa el layout B si realmente logra letras más grandes que la
+    // columna radial clásica (textos cortos suelen ir mejor en columna).
+    if (tangentialFontSize >= radialFontSize) {
+      // Rotación para que cada línea lea a lo ancho del sector: con la casilla
+      // arriba (dir=(0,-1)) la rotación es 0 y el texto queda horizontal.
+      const tangentRotation = Math.atan2(dirX, -dirY);
+
+      context.save();
+      context.translate(geometry.center.x, geometry.center.y);
+      context.rotate(tangentRotation);
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = pie.color;
+      context.font = withFontSize(style.label.font, tangentialFontSize);
+
+      const lineHeight = tangentialFontSize * H_RATIO;
+      lines.forEach((line, index) => {
+        // Línea 0 en la parte exterior (junto al puntero), las demás hacia dentro.
+        const radius = blockCenterR + (0.5 * (lineCount - 1) - index) * lineHeight;
+        const chord = 2 * radius * Math.sin(segHalfRad) * 0.92;
+        const text = chord > 0 ? truncateText(context, line, chord) : line;
+        // En este sistema local, +Y apunta hacia el centro de la ruleta:
+        // dibujar en -radius sitúa la línea a la distancia `radius` del centro.
+        context.fillText(text, 0, -radius);
+      });
+
+      context.restore();
+      return;
+    }
+
+    // --- Fallback: layout A (columna radial clásica) ---
     context.save();
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillStyle = pie.color;
-    context.font = withFontSize(style.label.font, fontSize);
+    context.font = withFontSize(style.label.font, radialFontSize);
 
     // Rotación del bloque: solidaria al sector (la palabra gira con la rueda).
     // atan2(dirX, -dirY) da 0 cuando el sector está arriba (dir=(0,-1)).
-    // El bloque rota con la rueda; si queda de cabeza al pasar por abajo, es correcto.
     const blockRotation = Math.atan2(dirX, -dirY) - Math.PI / 2;
 
     // Centro del primer carácter a half-step desde innerRadius
-    let distFromCenter = innerRadius + step * 0.5;
+    let distFromCenter = innerRadius + radialStep * 0.5;
 
     chars.forEach((char) => {
       if (distFromCenter > outerRadius) return; // seguridad
@@ -275,7 +394,7 @@ const drawPieLabel = ({
       context.rotate(blockRotation);
       context.fillText(char, 0, 0);
       context.restore();
-      distFromCenter += step;
+      distFromCenter += radialStep;
     });
 
     context.restore();
