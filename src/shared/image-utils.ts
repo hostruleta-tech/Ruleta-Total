@@ -4,9 +4,9 @@
  */
 
 /** Lado máximo en píxeles de la imagen guardada. */
-const MAX_SIDE = 320;
+const MAX_SIDE = 512;
 /** Calidad inicial para formatos con pérdida (WebP). */
-const INITIAL_QUALITY = 0.82;
+const INITIAL_QUALITY = 0.85;
 /** Límite aproximado del data URL (aprox. 240 KB de imagen). */
 const MAX_DATA_URL_LENGTH = 340_000;
 

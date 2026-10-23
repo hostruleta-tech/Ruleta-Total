@@ -300,8 +300,8 @@ const drawPieLabel = ({
   const maxWidth = Math.max(16, chordWidth);
 
   context.save();
-  // Texto SIEMPRE horizontal (sin rotación)
-  context.setTransform(1, 0, 0, 1, labelX, labelY);
+  // Texto SIEMPRE horizontal (sin rotación) - usa translate para preservar DPR
+  context.translate(labelX, labelY);
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = pie.color;
@@ -403,7 +403,10 @@ const drawPieImage = ({
   // Imagen SIEMPRE horizontal (sin rotación), posicionada en el centro del sector
   const centerX = geometry.center.x + geometry.radius * imgOffset * Math.cos(midDeg);
   const centerY = geometry.center.y + geometry.radius * imgOffset * Math.sin(midDeg);
-  context.setTransform(1, 0, 0, 1, centerX, centerY);
+  context.translate(centerX, centerY);
+  // High quality for image scaling
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.shadowColor = style.image.shadowColor;
   context.shadowBlur = style.image.shadowBlur;
   context.shadowOffsetY = 2;
@@ -940,6 +943,16 @@ export const drawCanvas = ({
   geometry,
   rouletteRef,
 }: DrawCanvas) => {
+  // Detect DPR from canvas physical size vs geometry (CSS size)
+  const canvas = context.canvas;
+  const dpr = canvas.width / (geometry.radius * 2) || 1;
+
+  // Apply DPR scaling for HiDPI screens
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // High quality image smoothing
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
   // Canvas único: fondo + sectores + textos + imágenes + flecha
   context.beginPath();
   context.fillStyle = mergedOptions.style.canvas.bg;

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { RouletteCanvas } from "../types";
 
 export const Roulette = ({
@@ -5,6 +6,17 @@ export const Roulette = ({
 }: {
   roulette: RouletteCanvas;
 }) => {
-  const { size } = roulette;
-  return <canvas ref={roulette.canvasRef} width={size} height={size} />;
+  const { size, canvasRef } = roulette;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+  }, [size, canvasRef]);
+
+  return <canvas ref={canvasRef} />;
 };
