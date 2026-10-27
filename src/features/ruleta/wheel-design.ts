@@ -61,7 +61,7 @@ export const WHEEL_PNG_OPACITY = 1;
  * Es un retoque visual del cliente: solo baja el disco (el centro y la flecha
  * quedan donde están) sin afectar la rotación ni la calibración angular.
  */
-export const WHEEL_DISK_VERTICAL_OFFSET_PX = 2;
+export const WHEEL_DISK_VERTICAL_OFFSET_PX = 6;
 
 /**
  * Ajuste (en grados) de la capa PNG respecto a la geometría del motor.
