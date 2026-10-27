@@ -11,6 +11,7 @@ import {
 	WHEEL_ALIGNMENT_OFFSET_MAX,
 	WHEEL_ALIGNMENT_OFFSET_MIN,
 	WHEEL_DETERMINE_ANGLE,
+	WHEEL_DISK_VERTICAL_OFFSET_PX,
 	WHEEL_IMAGE_URL,
 	WHEEL_INITIAL_ANGLE,
 	WHEEL_INITIAL_ANGLE_MAX,
@@ -615,7 +616,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 					className="absolute inset-0 h-full w-full object-contain select-none pointer-events-none"
 					style={{
 						opacity: pngOpacity,
-						transform: `rotate(${
+						transform: `translateY(${WHEEL_DISK_VERTICAL_OFFSET_PX}px) rotate(${
 							WHEEL_ROTATION_OFFSET + alignmentOffset - initialAngle
 						}deg)`,
 					}}

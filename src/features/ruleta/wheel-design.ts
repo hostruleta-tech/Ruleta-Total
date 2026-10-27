@@ -57,6 +57,13 @@ export const CENTER_SIZE_RATIO = 1.02;
 export const WHEEL_PNG_OPACITY = 1;
 
 /**
+ * Desplazamiento vertical (en px CSS) del PNG del disco respecto a su caja.
+ * Es un retoque visual del cliente: solo baja el disco (el centro y la flecha
+ * quedan donde están) sin afectar la rotación ni la calibración angular.
+ */
+export const WHEEL_DISK_VERTICAL_OFFSET_PX = 2;
+
+/**
  * Ajuste (en grados) de la capa PNG respecto a la geometría del motor.
  *
  * El motor aterriza siempre en `75 + 60·sector`; este valor desplaza el PNG
