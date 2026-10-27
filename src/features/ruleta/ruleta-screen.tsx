@@ -6,7 +6,13 @@ import React, {
 } from "react";
 import { Maximize, Minimize, LayoutDashboard, Bell } from "lucide-react";
 import type { RouletteItem } from "@/features/motor/types";
-import { RouletteWheel, type RouletteWheelControls } from "./roulette-wheel";
+import { RouletteWheel, type RouletteWheelControls, type WheelCalibration } from "./roulette-wheel";
+import {
+  WHEEL_DISK_OFFSET_X_PX,
+  WHEEL_DISK_OFFSET_Y_PX,
+  WHEEL_DISK_ROTATION,
+  WHEEL_DISK_SCALE,
+} from "./wheel-design";
 import { PrizeModal } from "./prize-modal";
 import { SpinAgainNotice } from "./spin-again-notice";
 import { soundManager } from "@/shared/sound-manager";
@@ -278,12 +284,9 @@ export const RouletteViewHook: React.FC = () => {
 
   // Calibración PNG guardada en el servidor (la usa el wheel en reposo y en
   // cada giro; el panel debug la guarda con PUT /api/wheel/calibration).
-  const [wheelCalibration, setWheelCalibration] = useState<{
-    alignmentOffset: number;
-    initialAngle: number;
-  } | null>(null);
+  const [wheelCalibration, setWheelCalibration] = useState<WheelCalibration | null>(null);
   const handleCalibrationSaved = useCallback(
-    (calibration: { alignmentOffset: number; initialAngle: number }) => {
+    (calibration: WheelCalibration) => {
       setWheelCalibration(calibration);
     },
     [],
@@ -319,7 +322,14 @@ export const RouletteViewHook: React.FC = () => {
         setRouletteItems(sortBySector(formattedPrizes));
 
         const rawCalibration = data?.calibration as
-          | { alignmentOffset?: unknown; initialAngle?: unknown }
+          | {
+              alignmentOffset?: unknown;
+              initialAngle?: unknown;
+              diskOffsetX?: unknown;
+              diskOffsetY?: unknown;
+              diskScale?: unknown;
+              diskRotation?: unknown;
+            }
           | undefined;
         if (
           rawCalibration &&
@@ -327,9 +337,26 @@ export const RouletteViewHook: React.FC = () => {
           Number.isFinite(Number(rawCalibration.alignmentOffset)) &&
           Number.isFinite(Number(rawCalibration.initialAngle))
         ) {
+          const finiteOr = (value: unknown, fallback: number) => {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+          };
           setWheelCalibration({
             alignmentOffset: Number(rawCalibration.alignmentOffset),
             initialAngle: Number(rawCalibration.initialAngle),
+            diskOffsetX: finiteOr(
+              rawCalibration.diskOffsetX,
+              WHEEL_DISK_OFFSET_X_PX,
+            ),
+            diskOffsetY: finiteOr(
+              rawCalibration.diskOffsetY,
+              WHEEL_DISK_OFFSET_Y_PX,
+            ),
+            diskScale: finiteOr(rawCalibration.diskScale, WHEEL_DISK_SCALE),
+            diskRotation: finiteOr(
+              rawCalibration.diskRotation,
+              WHEEL_DISK_ROTATION,
+            ),
           });
         }
       } catch (error) {
@@ -454,7 +481,10 @@ export const RouletteViewHook: React.FC = () => {
   };
 
   const handleSpinEnd = () => {
-    setIsSpinning(false);
+    // No-op: isSpinning se limpia en handlePrizeWon, que se ejecuta
+    // cuando la animación termina realmente. Si lo limpiamos aquí
+    // (onSpinDown → status "ending") la ruleta todavía está frenando
+    // y el botón se habilita antes de que se detenga.
   };
 
   const handlePrizeWon = (prize: string) => {
@@ -462,10 +492,12 @@ export const RouletteViewHook: React.FC = () => {
     if (spinAgainRef.current) {
       spinAgainRef.current = false;
       setSpinAgainNotice(prize);
+      setIsSpinning(false);
       return;
     }
 
     setFinalResult(prize);
+    setIsSpinning(false);
     // Respaldo: si el servidor no envió la imagen, se busca en los premios.
     const winningItem = rouletteItems?.find((item) => item.name === prize);
     setWinnerImage(

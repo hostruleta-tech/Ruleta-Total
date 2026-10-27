@@ -78,15 +78,43 @@ describe("sectores fijos de la ruleta", () => {
 
 describe("sanitizeCalibration", () => {
 	it("acepta valores válidos dentro de rango", () => {
-		expect(sanitizeCalibration({ alignmentOffset: 2.5, initialAngle: 90 })).toEqual(
-			{ alignmentOffset: 2.5, initialAngle: 90 },
-		);
+		expect(
+			sanitizeCalibration({
+				alignmentOffset: 2.5,
+				initialAngle: 90,
+				diskOffsetX: -12,
+				diskOffsetY: 20,
+				diskScale: 1.1,
+				diskRotation: -45,
+			}),
+		).toEqual({
+			alignmentOffset: 2.5,
+			initialAngle: 90,
+			diskOffsetX: -12,
+			diskOffsetY: 20,
+			diskScale: 1.1,
+			diskRotation: -45,
+		});
 		expect(
 			sanitizeCalibration({ alignmentOffset: 0, initialAngle: 75 }),
-		).toEqual({ alignmentOffset: 0, initialAngle: 75 });
+		).toEqual({
+			alignmentOffset: 0,
+			initialAngle: 75,
+			diskOffsetX: 0,
+			diskOffsetY: 16,
+			diskScale: 1,
+			diskRotation: 0,
+		});
 		expect(
 			sanitizeCalibration({ alignmentOffset: -180, initialAngle: 360 }),
-		).toEqual({ alignmentOffset: -180, initialAngle: 360 });
+		).toEqual({
+			alignmentOffset: -180,
+			initialAngle: 360,
+			diskOffsetX: 0,
+			diskOffsetY: 16,
+			diskScale: 1,
+			diskRotation: 0,
+		});
 	});
 
 	it("rechaza alignmentOffset fuera de rango", () => {
@@ -107,6 +135,40 @@ describe("sanitizeCalibration", () => {
 		).toThrow(CalibrationValidationError);
 		expect(() =>
 			sanitizeCalibration({ alignmentOffset: "no", initialAngle: "vale" }),
+		).toThrow(CalibrationValidationError);
+	});
+
+	it("rechaza desplazamiento del PNG fuera de rango", () => {
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				diskOffsetX: -201,
+			}),
+		).toThrow(CalibrationValidationError);
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				diskOffsetY: 201,
+			}),
+		).toThrow(CalibrationValidationError);
+	});
+
+	it("rechaza escala del PNG fuera de rango", () => {
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				diskScale: 0.49,
+			}),
+		).toThrow(CalibrationValidationError);
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				diskScale: 1.51,
+			}),
 		).toThrow(CalibrationValidationError);
 	});
 });

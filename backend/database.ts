@@ -7,6 +7,10 @@ import {
 	WHEEL_SECTOR_INDEXES,
 	WHEEL_DEFAULT_ALIGNMENT_OFFSET,
 	WHEEL_DEFAULT_INITIAL_ANGLE,
+	WHEEL_DEFAULT_DISK_OFFSET_X,
+	WHEEL_DEFAULT_DISK_OFFSET_Y,
+	WHEEL_DEFAULT_DISK_SCALE,
+	WHEEL_DEFAULT_DISK_ROTATION,
 	isValidSectorIndex,
 	type WheelCalibration,
 } from "./wheel";
@@ -224,6 +228,10 @@ async function ensureInitialized(): Promise<Client> {
               id INTEGER PRIMARY KEY CHECK (id = 1),
               alignment_offset REAL NOT NULL DEFAULT 0,
               initial_angle REAL NOT NULL DEFAULT 75,
+              disk_offset_x REAL NOT NULL DEFAULT 0,
+              disk_offset_y REAL NOT NULL DEFAULT 16,
+              disk_scale REAL NOT NULL DEFAULT 1,
+              disk_rotation REAL NOT NULL DEFAULT 0,
               updated_at TEXT
             )
           `,
@@ -285,6 +293,42 @@ async function ensureInitialized(): Promise<Client> {
 			);
 			console.log("[db] Columna 'sector_index' agregada a la tabla prizes.");
 			await backfillSectorIndexes(client);
+		}
+
+		// Migración: posición y escala del bloque PNG de la ruleta.
+		const wheelSettingsColumns = await client.execute(
+			"PRAGMA table_info(wheel_settings)",
+		);
+		const wheelColumnNames = new Set(
+			wheelSettingsColumns.rows.map((column) => column.name),
+		);
+		const wheelColumnMigrations: Array<{
+			name: string;
+			sql: string;
+		}> = [
+			{
+				name: "disk_offset_x",
+				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_x REAL NOT NULL DEFAULT 0",
+			},
+			{
+				name: "disk_offset_y",
+				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_y REAL NOT NULL DEFAULT 16",
+			},
+			{
+				name: "disk_scale",
+				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_scale REAL NOT NULL DEFAULT 1",
+			},
+			{
+				name: "disk_rotation",
+				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_rotation REAL NOT NULL DEFAULT 0",
+			},
+		];
+		for (const migration of wheelColumnMigrations) {
+			if (wheelColumnNames.has(migration.name)) continue;
+			await client.execute(migration.sql);
+			console.log(
+				`[db] Columna '${migration.name}' agregada a la tabla wheel_settings.`,
+			);
 		}
 
 		// Migraciones del sistema de tickets (idempotentes).
@@ -556,7 +600,7 @@ export async function getPrizeImage(id: number): Promise<string | null> {
 export async function getWheelCalibration(): Promise<WheelCalibration> {
 	const client = await getDb();
 	const result = await client.execute({
-		sql: "SELECT alignment_offset, initial_angle FROM wheel_settings WHERE id = 1",
+		sql: "SELECT alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation FROM wheel_settings WHERE id = 1",
 		args: [],
 	});
 
@@ -568,23 +612,50 @@ export async function getWheelCalibration(): Promise<WheelCalibration> {
 				: Number(row.alignment_offset),
 		initialAngle:
 			row == null ? WHEEL_DEFAULT_INITIAL_ANGLE : Number(row.initial_angle),
+		diskOffsetX:
+			row == null || row.disk_offset_x == null
+				? WHEEL_DEFAULT_DISK_OFFSET_X
+				: Number(row.disk_offset_x),
+		diskOffsetY:
+			row == null || row.disk_offset_y == null
+				? WHEEL_DEFAULT_DISK_OFFSET_Y
+				: Number(row.disk_offset_y),
+		diskScale:
+			row == null || row.disk_scale == null
+				? WHEEL_DEFAULT_DISK_SCALE
+				: Number(row.disk_scale),
+		diskRotation:
+			row == null || row.disk_rotation == null
+				? WHEEL_DEFAULT_DISK_ROTATION
+				: Number(row.disk_rotation),
 	};
 }
 
 /** Guarda la calibración global de la ruleta (upsert de la fila id=1). */
 export async function saveWheelCalibration(
-	alignmentOffset: number,
-	initialAngle: number,
+	calibration: WheelCalibration,
 ): Promise<WheelCalibration> {
 	const client = await getDb();
 	await client.execute({
-		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, updated_at)
-              VALUES (1, ?, ?, ?)
+		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, updated_at)
+              VALUES (1, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT (id) DO UPDATE SET
                 alignment_offset = excluded.alignment_offset,
                 initial_angle = excluded.initial_angle,
+                disk_offset_x = excluded.disk_offset_x,
+                disk_offset_y = excluded.disk_offset_y,
+                disk_scale = excluded.disk_scale,
+                disk_rotation = excluded.disk_rotation,
                 updated_at = excluded.updated_at`,
-		args: [alignmentOffset, initialAngle, new Date().toISOString()],
+		args: [
+			calibration.alignmentOffset,
+			calibration.initialAngle,
+			calibration.diskOffsetX,
+			calibration.diskOffsetY,
+			calibration.diskScale,
+			calibration.diskRotation,
+			new Date().toISOString(),
+		],
 	});
-	return { alignmentOffset, initialAngle };
+	return calibration;
 }

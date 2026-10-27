@@ -1,20 +1,20 @@
 /**
  * Diseño visual de la ruleta basado en las imágenes PNG del cliente.
  *
- * El disco (`ruleta-disco-v2.png`) ya trae los premios dibujados y su propio
+ * El disco (`ruleta-disco-v3.png`) ya trae los premios dibujados y su propio
  * borde; el centro (`ruleta-centro-v2.png`) es un PNG aparte que NO gira.
  * La flecha se dibuja con código y el marco cromado del diseño anterior se
  * elimina.
  *
  * Geometría medida del PNG actual (1254x1254px):
- * - 6 sectores exactos de 60°, costuras en ~29.5°+60k desde la parte superior
- *   (29.5°, 89°, 148°, 212°, 271.5°, 330°).
+ * - 6 sectores exactos de 60°, costuras en ~30°+60k desde la parte superior
+ *   (30°, 89°, 149.3°, 211.3°, 271°, 329.5°).
  * - El centro del sector superior (Premio 1) está en ~359.75° (≈ arriba),
  *   igual al PNG anterior, así que la calibración guardada (0°/75°) se mantiene.
  */
 
 /** URL pública del disco (en `public/`). */
-export const WHEEL_IMAGE_URL = "/ruleta-disco-v2.png";
+export const WHEEL_IMAGE_URL = "/ruleta-disco-v3.png";
 
 /** URL pública del centro (en `public/`). */
 export const CENTER_IMAGE_URL = "/ruleta-centro-v2.png";
@@ -57,11 +57,29 @@ export const CENTER_SIZE_RATIO = 1.02;
 export const WHEEL_PNG_OPACITY = 1;
 
 /**
- * Desplazamiento vertical (en px CSS) del PNG del disco respecto a su caja.
- * Es un retoque visual del cliente: solo baja el disco (el centro y la flecha
- * quedan donde están) sin afectar la rotación ni la calibración angular.
+ * Desplazamiento y escala del bloque PNG (disco + centro) respecto a su caja.
+ *
+ * Son retoques visuales del cliente: mueven y agrandan/encogen el bloque sin
+ * afectar la rotación ni la calibración angular. La flecha queda fija en la
+ * parte superior de la caja. Se calibran con `?wheelDebug=1` y se guardan en
+ * el servidor junto con la alineación.
  */
-export const WHEEL_DISK_VERTICAL_OFFSET_PX = 16;
+export const WHEEL_DISK_OFFSET_X_PX = 0;
+export const WHEEL_DISK_OFFSET_Y_PX = 16;
+export const WHEEL_DISK_SCALE = 1;
+export const WHEEL_DISK_ROTATION = 0;
+
+/** Rango de calibración para el desplazamiento del bloque PNG (px). */
+export const WHEEL_DISK_OFFSET_MIN = -200;
+export const WHEEL_DISK_OFFSET_MAX = 200;
+
+/** Rango de calibración para la escala del bloque PNG (1 = tamaño natural). */
+export const WHEEL_DISK_SCALE_MIN = 0.5;
+export const WHEEL_DISK_SCALE_MAX = 1.5;
+
+/** Rango de calibración para la rotación extra del bloque PNG (grados). */
+export const WHEEL_DISK_ROTATION_MIN = -180;
+export const WHEEL_DISK_ROTATION_MAX = 180;
 
 /**
  * Ajuste (en grados) de la capa PNG respecto a la geometría del motor.

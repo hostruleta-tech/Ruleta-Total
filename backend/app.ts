@@ -669,10 +669,7 @@ router.get("/wheel/calibration", requireOperator, async (_req, res) => {
 router.put("/wheel/calibration", requireOperator, async (req, res) => {
   try {
     const calibration = sanitizeCalibration(req.body);
-    const saved = await saveWheelCalibration(
-      calibration.alignmentOffset,
-      calibration.initialAngle,
-    );
+    const saved = await saveWheelCalibration(calibration);
     res.json(saved);
   } catch (error) {
     if (error instanceof CalibrationValidationError) {

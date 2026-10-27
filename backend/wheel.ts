@@ -47,15 +47,27 @@ export function hasCompleteSectorMapping(
  * - `alignmentOffset`: desplaza el PNG (en reposo y en cada aterrizaje) para
  *   que sus sectores cuadren con la geometría del motor.
  * - `initialAngle`: pose de reposo de la ruleta antes del primer giro.
+ * - `diskOffsetX` / `diskOffsetY`: desplazamiento del bloque PNG (disco +
+ *   centro) respecto a su caja, en px CSS.
+ * - `diskScale`: escala del bloque PNG (1 = tamaño natural).
+ * - `diskRotation`: rotación extra del bloque PNG (grados).
  */
 export interface WheelCalibration {
 	alignmentOffset: number;
 	initialAngle: number;
+	diskOffsetX: number;
+	diskOffsetY: number;
+	diskScale: number;
+	diskRotation: number;
 }
 
 /** Valores por defecto de la calibración (mismos que en wheel-design.ts). */
 export const WHEEL_DEFAULT_ALIGNMENT_OFFSET = 0;
 export const WHEEL_DEFAULT_INITIAL_ANGLE = 75;
+export const WHEEL_DEFAULT_DISK_OFFSET_X = 0;
+export const WHEEL_DEFAULT_DISK_OFFSET_Y = 16;
+export const WHEEL_DEFAULT_DISK_SCALE = 1;
+export const WHEEL_DEFAULT_DISK_ROTATION = 0;
 
 /** Rango válido para `alignmentOffset` (grados). */
 export const WHEEL_ALIGNMENT_OFFSET_MIN = -180;
@@ -65,8 +77,26 @@ export const WHEEL_ALIGNMENT_OFFSET_MAX = 180;
 export const WHEEL_INITIAL_ANGLE_MIN = 0;
 export const WHEEL_INITIAL_ANGLE_MAX = 360;
 
+/** Rango válido para el desplazamiento del bloque PNG (px). */
+export const WHEEL_DISK_OFFSET_MIN = -200;
+export const WHEEL_DISK_OFFSET_MAX = 200;
+
+/** Rango válido para la escala del bloque PNG. */
+export const WHEEL_DISK_SCALE_MIN = 0.5;
+export const WHEEL_DISK_SCALE_MAX = 1.5;
+
+/** Rango válido para la rotación extra del bloque PNG (grados). */
+export const WHEEL_DISK_ROTATION_MIN = -180;
+export const WHEEL_DISK_ROTATION_MAX = 180;
+
 /** Error de validación de calibración. */
 export class CalibrationValidationError extends Error {}
+
+/** Lee un número opcional: usa el valor por defecto si falta o viene vacío. */
+function readOptionalNumber(value: unknown, fallback: number): number {
+	if (value == null || value === "") return fallback;
+	return Number(value);
+}
 
 /** Valida y normaliza la calibración recibida del panel. */
 export function sanitizeCalibration(
@@ -75,10 +105,30 @@ export function sanitizeCalibration(
 	const candidate = (raw ?? {}) as {
 		alignmentOffset?: unknown;
 		initialAngle?: unknown;
+		diskOffsetX?: unknown;
+		diskOffsetY?: unknown;
+		diskScale?: unknown;
+		diskRotation?: unknown;
 	};
 
 	const alignmentOffset = Number(candidate.alignmentOffset);
 	const initialAngle = Number(candidate.initialAngle);
+	const diskOffsetX = readOptionalNumber(
+		candidate.diskOffsetX,
+		WHEEL_DEFAULT_DISK_OFFSET_X,
+	);
+	const diskOffsetY = readOptionalNumber(
+		candidate.diskOffsetY,
+		WHEEL_DEFAULT_DISK_OFFSET_Y,
+	);
+	const diskScale = readOptionalNumber(
+		candidate.diskScale,
+		WHEEL_DEFAULT_DISK_SCALE,
+	);
+	const diskRotation = readOptionalNumber(
+		candidate.diskRotation,
+		WHEEL_DEFAULT_DISK_ROTATION,
+	);
 
 	if (
 		!Number.isFinite(alignmentOffset) ||
@@ -100,5 +150,52 @@ export function sanitizeCalibration(
 		);
 	}
 
-	return { alignmentOffset, initialAngle };
+	if (
+		!Number.isFinite(diskOffsetX) ||
+		diskOffsetX < WHEEL_DISK_OFFSET_MIN ||
+		diskOffsetX > WHEEL_DISK_OFFSET_MAX
+	) {
+		throw new CalibrationValidationError(
+			`diskOffsetX debe estar entre ${WHEEL_DISK_OFFSET_MIN} y ${WHEEL_DISK_OFFSET_MAX}.`,
+		);
+	}
+
+	if (
+		!Number.isFinite(diskOffsetY) ||
+		diskOffsetY < WHEEL_DISK_OFFSET_MIN ||
+		diskOffsetY > WHEEL_DISK_OFFSET_MAX
+	) {
+		throw new CalibrationValidationError(
+			`diskOffsetY debe estar entre ${WHEEL_DISK_OFFSET_MIN} y ${WHEEL_DISK_OFFSET_MAX}.`,
+		);
+	}
+
+	if (
+		!Number.isFinite(diskScale) ||
+		diskScale < WHEEL_DISK_SCALE_MIN ||
+		diskScale > WHEEL_DISK_SCALE_MAX
+	) {
+		throw new CalibrationValidationError(
+			`diskScale debe estar entre ${WHEEL_DISK_SCALE_MIN} y ${WHEEL_DISK_SCALE_MAX}.`,
+		);
+	}
+
+	if (
+		!Number.isFinite(diskRotation) ||
+		diskRotation < WHEEL_DISK_ROTATION_MIN ||
+		diskRotation > WHEEL_DISK_ROTATION_MAX
+	) {
+		throw new CalibrationValidationError(
+			`diskRotation debe estar entre ${WHEEL_DISK_ROTATION_MIN} y ${WHEEL_DISK_ROTATION_MAX}.`,
+		);
+	}
+
+	return {
+		alignmentOffset,
+		initialAngle,
+		diskOffsetX,
+		diskOffsetY,
+		diskScale,
+		diskRotation,
+	};
 }

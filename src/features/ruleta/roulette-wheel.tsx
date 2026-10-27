@@ -11,7 +11,16 @@ import {
 	WHEEL_ALIGNMENT_OFFSET_MAX,
 	WHEEL_ALIGNMENT_OFFSET_MIN,
 	WHEEL_DETERMINE_ANGLE,
-	WHEEL_DISK_VERTICAL_OFFSET_PX,
+	WHEEL_DISK_OFFSET_MAX,
+	WHEEL_DISK_OFFSET_MIN,
+	WHEEL_DISK_OFFSET_X_PX,
+	WHEEL_DISK_OFFSET_Y_PX,
+	WHEEL_DISK_ROTATION,
+	WHEEL_DISK_ROTATION_MAX,
+	WHEEL_DISK_ROTATION_MIN,
+	WHEEL_DISK_SCALE,
+	WHEEL_DISK_SCALE_MAX,
+	WHEEL_DISK_SCALE_MIN,
 	WHEEL_IMAGE_URL,
 	WHEEL_INITIAL_ANGLE,
 	WHEEL_INITIAL_ANGLE_MAX,
@@ -159,10 +168,14 @@ const DebugWheelOverlay: React.FC<DebugWheelOverlayProps> = ({
 	);
 };
 
-/** Calibración guardada en el servidor (alineación + pose inicial). */
+/** Calibración guardada en el servidor (alineación + pose inicial + PNG). */
 export interface WheelCalibration {
 	alignmentOffset: number;
 	initialAngle: number;
+	diskOffsetX: number;
+	diskOffsetY: number;
+	diskScale: number;
+	diskRotation: number;
 }
 
 /** Ajustes de visualización SOLO de calibración (opacidad y canvas). */
@@ -286,20 +299,37 @@ const CalibrationPanel: React.FC<{
 	view: ViewSettings;
 	alignmentOffset: number;
 	initialAngle: number;
+	diskOffsetX: number;
+	diskOffsetY: number;
+	diskScale: number;
+	diskRotation: number;
 	saveState: SaveState;
 	onChangeView: (patch: Partial<ViewSettings>) => void;
 	onChangeAlignment: (alignmentOffset: number) => void;
 	onChangePose: (initialAngle: number) => void;
+	onChangeGeometry: (
+		patch: Partial<
+			Pick<
+				WheelCalibration,
+				"diskOffsetX" | "diskOffsetY" | "diskScale" | "diskRotation"
+			>
+		>,
+	) => void;
 	onSave: () => void;
 	onReset: () => void;
 }> = ({
 	view,
 	alignmentOffset,
 	initialAngle,
+	diskOffsetX,
+	diskOffsetY,
+	diskScale,
+	diskRotation,
 	saveState,
 	onChangeView,
 	onChangeAlignment,
 	onChangePose,
+	onChangeGeometry,
 	onSave,
 	onReset,
 }) => {
@@ -310,10 +340,30 @@ const CalibrationPanel: React.FC<{
 	const handleOpacity = (event: React.ChangeEvent<HTMLInputElement>) =>
 		onChangeView({ pngOpacity: Number(event.target.value) / 100 });
 
+	/** Mueve el bloque PNG; con Shift el paso es de 10 px. */
+	const nudge = (dx: number, dy: number, step = 1) => {
+		onChangeGeometry({
+			diskOffsetX: clampNumber(
+				diskOffsetX + dx * step,
+				WHEEL_DISK_OFFSET_MIN,
+				WHEEL_DISK_OFFSET_MAX,
+			),
+			diskOffsetY: clampNumber(
+				diskOffsetY + dy * step,
+				WHEEL_DISK_OFFSET_MIN,
+				WHEEL_DISK_OFFSET_MAX,
+			),
+		});
+	};
+
 	const handleCopy = async () => {
 		const snippet = [
 			`export const WHEEL_ALIGNMENT_OFFSET = ${alignmentOffset};`,
 			`export const WHEEL_INITIAL_ANGLE = ${initialAngle};`,
+			`export const WHEEL_DISK_OFFSET_X_PX = ${diskOffsetX};`,
+			`export const WHEEL_DISK_OFFSET_Y_PX = ${diskOffsetY};`,
+			`export const WHEEL_DISK_SCALE = ${diskScale};`,
+			`export const WHEEL_DISK_ROTATION = ${diskRotation};`,
 		].join("\n");
 		try {
 			if (navigator.clipboard) {
@@ -339,7 +389,7 @@ const CalibrationPanel: React.FC<{
 	}
 
 	return (
-		<div className="absolute right-2 top-2 z-50 w-[218px] rounded-xl border border-white/20 bg-black/80 p-3 text-[11px] text-white shadow-2xl">
+		<div className="absolute right-2 top-2 z-50 max-h-[calc(100%-1rem)] w-[232px] overflow-y-auto rounded-xl border border-white/20 bg-black/80 p-3 text-[11px] text-white shadow-2xl">
 			<div className="mb-2 flex items-center justify-between">
 				<span className="text-[12px] font-extrabold uppercase tracking-wide text-cyan-300">
 					Calibración
@@ -406,6 +456,116 @@ const CalibrationPanel: React.FC<{
 				onChange={(event) => onChangePose(Number(event.target.value))}
 				className="w-full accent-cyan-400"
 			/>
+
+			<fieldset className="mt-3 rounded-lg border border-white/15 p-2">
+				<legend className="px-1 text-[10px] font-bold uppercase tracking-wide text-cyan-300/80">
+					Posición / tamaño PNG
+				</legend>
+
+				{/* Flechas de movimiento (Shift = paso de 10 px) */}
+				<div className="mx-auto mb-2 grid w-[86px] grid-cols-3 grid-rows-2 gap-1">
+					<button
+						type="button"
+						title="Mover arriba (Shift = 10 px)"
+						onClick={(event) => nudge(0, -1, event.shiftKey ? 10 : 1)}
+						className="col-start-2 row-start-1 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						↑
+					</button>
+					<button
+						type="button"
+						title="Mover a la izquierda (Shift = 10 px)"
+						onClick={(event) => nudge(-1, 0, event.shiftKey ? 10 : 1)}
+						className="col-start-1 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						←
+					</button>
+					<button
+						type="button"
+						title="Mover abajo (Shift = 10 px)"
+						onClick={(event) => nudge(0, 1, event.shiftKey ? 10 : 1)}
+						className="col-start-2 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						↓
+					</button>
+					<button
+						type="button"
+						title="Mover a la derecha (Shift = 10 px)"
+						onClick={(event) => nudge(1, 0, event.shiftKey ? 10 : 1)}
+						className="col-start-3 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						→
+					</button>
+				</div>
+
+				<label className="mb-1 flex items-center justify-between">
+					<span>Horizontal (X)</span>
+					<b>{Math.round(diskOffsetX)} px</b>
+				</label>
+				<input
+					type="range"
+					min={WHEEL_DISK_OFFSET_MIN}
+					max={WHEEL_DISK_OFFSET_MAX}
+					step={1}
+					value={diskOffsetX}
+					onChange={(event) =>
+						onChangeGeometry({ diskOffsetX: Number(event.target.value) })
+					}
+					className="w-full accent-cyan-400"
+				/>
+
+				<label className="mt-2 mb-1 flex items-center justify-between">
+					<span>Vertical (Y)</span>
+					<b>{Math.round(diskOffsetY)} px</b>
+				</label>
+				<input
+					type="range"
+					min={WHEEL_DISK_OFFSET_MIN}
+					max={WHEEL_DISK_OFFSET_MAX}
+					step={1}
+					value={diskOffsetY}
+					onChange={(event) =>
+						onChangeGeometry({ diskOffsetY: Number(event.target.value) })
+					}
+					className="w-full accent-cyan-400"
+				/>
+
+				<label className="mt-2 mb-1 flex items-center justify-between">
+					<span>Escala</span>
+					<b>{Math.round(diskScale * 100)}%</b>
+				</label>
+				<input
+					type="range"
+					min={Math.round(WHEEL_DISK_SCALE_MIN * 100)}
+					max={Math.round(WHEEL_DISK_SCALE_MAX * 100)}
+					step={1}
+					value={Math.round(diskScale * 100)}
+					onChange={(event) =>
+						onChangeGeometry({
+							diskScale: Number(event.target.value) / 100,
+						})
+					}
+					className="w-full accent-cyan-400"
+				/>
+
+				<label className="mt-2 mb-1 flex items-center justify-between">
+					<span>Rotación</span>
+					<b>{Math.round(diskRotation)}°</b>
+				</label>
+				<input
+					type="range"
+					min={WHEEL_DISK_ROTATION_MIN}
+					max={WHEEL_DISK_ROTATION_MAX}
+					step={1}
+					value={diskRotation}
+					onChange={(event) =>
+						onChangeGeometry({
+							diskRotation: Number(event.target.value),
+						})
+					}
+					className="w-full accent-cyan-400"
+				/>
+			</fieldset>
 
 			<div className="mt-3 flex gap-1.5">
 				<button
@@ -474,54 +634,85 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	const serverAlignment =
 		calibration?.alignmentOffset ?? WHEEL_ALIGNMENT_OFFSET;
 	const serverInitialAngle = calibration?.initialAngle ?? WHEEL_INITIAL_ANGLE;
-	const [draft, setDraft] = useState<WheelCalibration | null>(null);
+	const serverDiskOffsetX = calibration?.diskOffsetX ?? WHEEL_DISK_OFFSET_X_PX;
+	const serverDiskOffsetY = calibration?.diskOffsetY ?? WHEEL_DISK_OFFSET_Y_PX;
+	const serverDiskScale = calibration?.diskScale ?? WHEEL_DISK_SCALE;
+	const serverDiskRotation = calibration?.diskRotation ?? WHEEL_DISK_ROTATION;
+	const [draft, setDraft] = useState<Partial<WheelCalibration> | null>(null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
 
 	const previewAlignment = readParamNumber("wheelAlign");
 	const previewAngle = readParamNumber("wheelAngle");
+	const previewDiskOffsetX = readParamNumber("wheelX");
+	const previewDiskOffsetY = readParamNumber("wheelY");
+	const previewDiskScale = readParamNumber("wheelScale");
+	const previewDiskRotation = readParamNumber("wheelRotation");
 
 	const alignmentOffset =
 		draft?.alignmentOffset ?? previewAlignment ?? serverAlignment;
 	const initialAngle = draft?.initialAngle ?? previewAngle ?? serverInitialAngle;
+	const diskOffsetX =
+		draft?.diskOffsetX ?? previewDiskOffsetX ?? serverDiskOffsetX;
+	const diskOffsetY =
+		draft?.diskOffsetY ?? previewDiskOffsetY ?? serverDiskOffsetY;
+	const diskScale = draft?.diskScale ?? previewDiskScale ?? serverDiskScale;
+	const diskRotation =
+		draft?.diskRotation ?? previewDiskRotation ?? serverDiskRotation;
 
-	const handleChangeAlignment = useCallback(
-		(alignment: number) => {
-			setSaveState("idle");
-			setDraft((previous) => ({
-				alignmentOffset: alignment,
-				initialAngle: previous?.initialAngle ?? serverInitialAngle,
-			}));
-		},
-		[serverInitialAngle],
-	);
+	const handleChangeAlignment = useCallback((alignment: number) => {
+		setSaveState("idle");
+		setDraft((previous) => ({ ...previous, alignmentOffset: alignment }));
+	}, []);
 
-	const handleChangePose = useCallback(
-		(angle: number) => {
+	const handleChangePose = useCallback((angle: number) => {
+		setSaveState("idle");
+		setDraft((previous) => ({ ...previous, initialAngle: angle }));
+	}, []);
+
+	const handleChangeGeometry = useCallback(
+		(
+			patch: Partial<
+				Pick<WheelCalibration, "diskOffsetX" | "diskOffsetY" | "diskScale">
+			>,
+		) => {
 			setSaveState("idle");
-			setDraft((previous) => ({
-				alignmentOffset: previous?.alignmentOffset ?? serverAlignment,
-				initialAngle: angle,
-			}));
+			setDraft((previous) => ({ ...previous, ...patch }));
 		},
-		[serverAlignment],
+		[],
 	);
 
 	const handleSaveCalibration = useCallback(async () => {
 		setSaveState("saving");
+		const next: WheelCalibration = {
+			alignmentOffset,
+			initialAngle,
+			diskOffsetX,
+			diskOffsetY,
+			diskScale,
+			diskRotation,
+		};
 		try {
 			const response = await fetch(`${API_URL}/wheel/calibration`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				credentials: "same-origin",
-				body: JSON.stringify({ alignmentOffset, initialAngle }),
+				body: JSON.stringify(next),
 			});
 			if (!response.ok) throw new Error("save failed");
 			setSaveState("saved");
-			onCalibrationSaved?.({ alignmentOffset, initialAngle });
+			onCalibrationSaved?.(next);
 		} catch {
 			setSaveState("error");
 		}
-	}, [alignmentOffset, initialAngle, onCalibrationSaved]);
+	}, [
+		alignmentOffset,
+		initialAngle,
+		diskOffsetX,
+		diskOffsetY,
+		diskScale,
+		diskRotation,
+		onCalibrationSaved,
+	]);
 
 	const handleResetCalibration = useCallback(() => {
 		setDraft(null);
@@ -536,12 +727,12 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 		(totalRotation: number) => {
 			if (diskRef.current) {
 				diskRef.current.style.transform = `rotate(${
-					WHEEL_ROTATION_OFFSET + alignmentOffset - totalRotation
+					WHEEL_ROTATION_OFFSET + alignmentOffset + diskRotation - totalRotation
 				}deg)`;
 			}
 			if (debugMode) setDebugRotation(totalRotation);
 		},
-		[debugMode, alignmentOffset],
+		[debugMode, alignmentOffset, diskRotation],
 	);
 
 	const { roulette, onStart } = useRoulette({
@@ -604,41 +795,51 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 				<Roulette roulette={roulette} />
 			</div>
 
-			{/* Disco PNG giratorio (los premios ya están dibujados). */}
-			{diskState !== "error" && (
-				<img
-					ref={diskRef}
-					src={WHEEL_IMAGE_URL}
-					alt=""
-					draggable={false}
-					onLoad={() => setDiskState("ok")}
-					onError={() => setDiskState("error")}
-					className="absolute inset-0 h-full w-full object-contain select-none pointer-events-none"
-					style={{
-						opacity: pngOpacity,
-						transform: `translateY(${WHEEL_DISK_VERTICAL_OFFSET_PX}px) rotate(${
-							WHEEL_ROTATION_OFFSET + alignmentOffset - initialAngle
-						}deg)`,
-					}}
-					aria-hidden="true"
-				/>
-			)}
+			{/* Bloque PNG (disco + centro): se mueven y escalan juntos desde el
+			    panel de calibración. La flecha NO se mueve. */}
+			<div
+				className="pointer-events-none absolute inset-0"
+				style={{
+					transform: `translate(${diskOffsetX}px, ${diskOffsetY}px) scale(${diskScale})`,
+					transformOrigin: "center center",
+				}}
+			>
+				{/* Disco PNG giratorio (los premios ya están dibujados). */}
+				{diskState !== "error" && (
+					<img
+						ref={diskRef}
+						src={WHEEL_IMAGE_URL}
+						alt=""
+						draggable={false}
+						onLoad={() => setDiskState("ok")}
+						onError={() => setDiskState("error")}
+						className="absolute inset-0 h-full w-full object-contain select-none pointer-events-none"
+						style={{
+							opacity: pngOpacity,
+							transform: `rotate(${
+						WHEEL_ROTATION_OFFSET + alignmentOffset + diskRotation - initialAngle
+					}deg)`,
+						}}
+						aria-hidden="true"
+					/>
+				)}
 
-			{/* Centro fijo (PNG aparte, NO gira). */}
-			{diskState === "ok" && (
-				<img
-					src={CENTER_IMAGE_URL}
-					alt=""
-					draggable={false}
-					className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain select-none"
-					style={{
-						opacity: pngOpacity,
-						width: `${CENTER_SIZE_RATIO * 100}%`,
-						height: `${CENTER_SIZE_RATIO * 100}%`,
-					}}
-					aria-hidden="true"
-				/>
-			)}
+				{/* Centro fijo (PNG aparte, NO gira). */}
+				{diskState === "ok" && (
+					<img
+						src={CENTER_IMAGE_URL}
+						alt=""
+						draggable={false}
+						className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain select-none"
+						style={{
+							opacity: pngOpacity,
+							width: `${CENTER_SIZE_RATIO * 100}%`,
+							height: `${CENTER_SIZE_RATIO * 100}%`,
+						}}
+						aria-hidden="true"
+					/>
+				)}
+			</div>
 
 			{/* Flecha / puntero en código, en la parte superior */}
 			<div className="absolute -top-3 left-1/2 z-20 -translate-x-1/2 pointer-events-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.4)]">
@@ -707,10 +908,15 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 					view={view}
 					alignmentOffset={alignmentOffset}
 					initialAngle={initialAngle}
+					diskOffsetX={diskOffsetX}
+					diskOffsetY={diskOffsetY}
+					diskScale={diskScale}
+					diskRotation={diskRotation}
 					saveState={saveState}
 					onChangeView={updateView}
 					onChangeAlignment={handleChangeAlignment}
 					onChangePose={handleChangePose}
+					onChangeGeometry={handleChangeGeometry}
 					onSave={handleSaveCalibration}
 					onReset={handleResetCalibration}
 				/>
