@@ -1,4 +1,4 @@
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../database";
 import type {
 	Ticket,
 	TicketBatch,
@@ -74,7 +74,7 @@ function mapBatchSummary(row: Row): TicketBatchSummary {
 
 /** Inserta el lote y todos sus tickets en una sola transacción. */
 export async function insertBatchWithTickets(
-	client: Client,
+	client: DbClient,
 	batch: TicketBatch,
 	tickets: NewTicketRow[],
 ): Promise<void> {
@@ -110,7 +110,7 @@ export async function insertBatchWithTickets(
 }
 
 export async function getTicketById(
-	client: Client,
+	client: DbClient,
 	id: string,
 ): Promise<Ticket | null> {
 	const result = await client.execute({
@@ -126,7 +126,7 @@ export async function getTicketById(
  * ticket; la reserva y el canje se implementarán en la fase 2.
  */
 export async function findTicketByTokenHash(
-	client: Client,
+	client: DbClient,
 	tokenHash: string,
 ): Promise<Ticket | null> {
 	const result = await client.execute({
@@ -142,7 +142,7 @@ export async function findTicketByTokenHash(
 
 /** Fila con token cifrado, solo para uso interno del servidor. */
 export async function getTicketSecretById(
-	client: Client,
+	client: DbClient,
 	id: string,
 ): Promise<TicketSecretRow | null> {
 	const result = await client.execute({
@@ -209,7 +209,7 @@ function scopeFilter(
 }
 
 export async function listTickets(
-	client: Client,
+	client: DbClient,
 	options: ListTicketsOptions,
 ): Promise<{ tickets: Ticket[]; total: number }> {
 	const now = options.now ?? new Date();
@@ -264,7 +264,7 @@ export async function listTickets(
 }
 
 export async function getBatchById(
-	client: Client,
+	client: DbClient,
 	id: string,
 ): Promise<TicketBatch | null> {
 	const result = await client.execute({
@@ -276,7 +276,7 @@ export async function getBatchById(
 }
 
 export async function listBatchTickets(
-	client: Client,
+	client: DbClient,
 	batchId: string,
 	limit?: number,
 ): Promise<Ticket[]> {
@@ -290,7 +290,7 @@ export async function listBatchTickets(
 }
 
 export async function listBatchTicketSecrets(
-	client: Client,
+	client: DbClient,
 	batchId: string,
 	limit?: number,
 	onlyActive?: boolean,
@@ -319,7 +319,7 @@ export async function listBatchTicketSecrets(
 }
 
 export async function listBatches(
-	client: Client,
+	client: DbClient,
 	options: ListBatchesOptions,
 ): Promise<{ batches: TicketBatchSummary[]; total: number }> {
 	const nowIso = (options.now ?? new Date()).toISOString();
@@ -372,7 +372,7 @@ export interface ValidationResult {
 }
 
 export async function validateTicket(
-	client: Client,
+	client: DbClient,
 	tokenHash: string,
 	now: Date = new Date(),
 ): Promise<ValidationResult> {
@@ -413,7 +413,7 @@ export async function validateTicket(
  * Se usa internamente cuando se detecta reserved_until <= now.
  */
 async function releaseExpiredReservation(
-	client: Client,
+	client: DbClient,
 	ticketId: string,
 	now: Date,
 ): Promise<void> {
@@ -433,7 +433,7 @@ async function releaseExpiredReservation(
  * no se consume y el participante puede volver a girar.
  */
 export async function releaseReservation(
-	client: Client,
+	client: DbClient,
 	tokenHash: string,
 ): Promise<void> {
 	await client.execute({
@@ -460,7 +460,7 @@ export interface ReserveResult {
 }
 
 export async function reserveTicket(
-	client: Client,
+	client: DbClient,
 	tokenHash: string,
 	ttlMinutes: number = 5,
 	now: Date = new Date(),
@@ -516,7 +516,7 @@ export interface PrizeInfo {
 }
 
 export async function redeemTicket(
-	client: Client,
+	client: DbClient,
 	tokenHash: string,
 	prize: PrizeInfo,
 	now: Date = new Date(),
@@ -583,7 +583,7 @@ export interface VoidResult {
 }
 
 export async function voidTicket(
-	client: Client,
+	client: DbClient,
 	ticketId: string,
 	now: Date = new Date(),
 ): Promise<VoidResult> {

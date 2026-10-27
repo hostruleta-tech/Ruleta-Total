@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../database";
 import {
 	verifySession,
 	requireOperator,
@@ -16,7 +16,7 @@ import {
  * - GET  /api/auth/me     -> devuelve { authenticated: boolean }
  * - POST /api/auth/logout -> borra cookie
  */
-export function createAuthRouter(getClient: () => Promise<Client>): Router {
+export function createAuthRouter(getClient: () => Promise<DbClient>): Router {
 	const router = Router();
 
 	// Rate limit en memoria (por IP) - se limpia oportunamente

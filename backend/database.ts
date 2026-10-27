@@ -1,5 +1,5 @@
 import "./env";
-import { createClient, type Client } from "@libsql/client/web";
+import mysql from "mysql2/promise";
 import { runMigrations } from "./migrations";
 import { SEED_TEMPLATES } from "./seed-data";
 import {
@@ -49,22 +49,82 @@ export interface RouletteTemplate {
 	prizes?: Prize[];
 }
 
+export interface InStatement {
+	sql: string;
+	args?: unknown[];
+}
+
+export interface Migration {
+	id: string;
+	statements: string[];
+}
+
 type Row = Record<string, unknown>;
 
-let db: Client | null = null;
-let initPromise: Promise<Client> | null = null;
+/**
+ * Interfaz compatible con la antigua API de @libsql/client.
+ * Envuelve mysql2/promise Pool para minimizar cambios en el resto del código.
+ */
+export interface DbClient {
+	execute(sql: string | { sql: string; args?: unknown[] }): Promise<{ rows: Row[]; rowsAffected?: number }>;
+	batch(
+		statements: Array<{ sql: string; args?: unknown[] }>,
+		_mode: "write" | "read",
+	): Promise<void>;
+}
 
-function createDbClient(): Client {
-	const url = process.env.TURSO_DATABASE_URL;
-	const authToken = process.env.TURSO_AUTH_TOKEN;
+let pool: mysql.Pool | null = null;
+let initPromise: Promise<DbClient> | null = null;
 
-	if (!url || !authToken) {
+function createDbClient(): DbClient {
+	const host = process.env.MARIADB_HOST ?? "127.0.0.1";
+	const port = Number(process.env.MARIADB_PORT ?? 3306);
+	const database = process.env.MARIADB_DATABASE;
+	const user = process.env.MARIADB_USER;
+	const password = process.env.MARIADB_PASSWORD;
+
+	if (!database || !user || password == null) {
 		throw new Error(
-			"TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in the environment.",
+			"MARIADB_DATABASE, MARIADB_USER y MARIADB_PASSWORD deben estar definidos en el entorno.",
 		);
 	}
 
-	return createClient({ url, authToken });
+	const p = mysql.createPool({
+		host,
+		port,
+		database,
+		user,
+		password,
+		connectionLimit: 10,
+	});
+
+	return {
+		async execute(input: string | { sql: string; args?: unknown[] }) {
+			const sql =
+				typeof input === "string" ? input : input.sql;
+			const args =
+				typeof input === "string" ? [] : (input.args ?? []);
+
+			const [rows] = await p.query(sql, args);
+			const result = rows as Row[] & { affectedRows?: number };
+			return { rows: result, rowsAffected: result.affectedRows ?? 0 };
+		},
+		async batch(statements, _mode) {
+			const connection = await p.getConnection();
+			try {
+				await connection.beginTransaction();
+				for (const stmt of statements) {
+					await connection.query(stmt.sql, stmt.args ?? []);
+				}
+				await connection.commit();
+			} catch (error) {
+				await connection.rollback();
+				throw error;
+			} finally {
+				connection.release();
+			}
+		},
+	};
 }
 
 function mapRoulette(row: Row): RouletteTemplate {
@@ -151,7 +211,7 @@ function normalizeSectorPrizes(rouletteId: number, prizes: Prize[]): Prize[] {
  * Migración de datos: asigna 0..5 a los primeros 6 premios de cada plantilla.
  * Los sobrantes quedan sin sector; en la plantilla activa se eliminan.
  */
-export async function backfillSectorIndexes(client: Client): Promise<void> {
+export async function backfillSectorIndexes(client: DbClient): Promise<void> {
 	const roulettes = await client.execute("SELECT id FROM roulettes");
 
 	for (const row of roulettes.rows) {
@@ -187,29 +247,33 @@ export async function backfillSectorIndexes(client: Client): Promise<void> {
 	}
 }
 
-async function ensureInitialized(): Promise<Client> {
-	if (db) return db;
+async function ensureInitialized(): Promise<DbClient> {
+	if (pool) {
+		// Retornar cliente existente usando el pool ya creado
+		return createDbClient();
+	}
 	if (initPromise) return initPromise;
 
 	initPromise = (async () => {
 		const client = createDbClient();
+		const p = pool!;
 
-		await client.batch(
-			[
-				{
-					sql: `
+		// Crear tablas base usando transacción (equivalente a client.batch "write")
+		const connection = await p.getConnection();
+		try {
+			await connection.beginTransaction();
+
+			await connection.query(`
             CREATE TABLE IF NOT EXISTS roulettes (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              id INTEGER PRIMARY KEY AUTO_INCREMENT,
               name TEXT NOT NULL UNIQUE,
-              is_active BOOLEAN NOT NULL DEFAULT 0
+              is_active TINYINT(1) NOT NULL DEFAULT 0
             )
-          `,
-					args: [],
-				},
-				{
-					sql: `
+          `);
+
+			await connection.query(`
             CREATE TABLE IF NOT EXISTS prizes (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              id INTEGER PRIMARY KEY AUTO_INCREMENT,
               roulette_id INTEGER NOT NULL,
               name TEXT NOT NULL,
               backgroundColor TEXT NOT NULL,
@@ -218,12 +282,9 @@ async function ensureInitialized(): Promise<Client> {
               sector_index INTEGER,
               FOREIGN KEY (roulette_id) REFERENCES roulettes (id) ON DELETE CASCADE
             )
-          `,
-					args: [],
-				},
-				{
-					// Calibración global del PNG de la ruleta (fila única id=1).
-					sql: `
+          `);
+
+			await connection.query(`
             CREATE TABLE IF NOT EXISTS wheel_settings (
               id INTEGER PRIMARY KEY CHECK (id = 1),
               alignment_offset REAL NOT NULL DEFAULT 0,
@@ -234,34 +295,38 @@ async function ensureInitialized(): Promise<Client> {
               disk_rotation REAL NOT NULL DEFAULT 0,
               updated_at TEXT
             )
-          `,
-					args: [],
-				},
-				{
-					sql: `INSERT OR IGNORE INTO wheel_settings (id, alignment_offset, initial_angle, updated_at) VALUES (1, ?, ?, ?)`,
-					args: [
-						WHEEL_DEFAULT_ALIGNMENT_OFFSET,
-						WHEEL_DEFAULT_INITIAL_ANGLE,
-						new Date().toISOString(),
-					],
-				},
-			],
-			"write",
-		);
+          `);
 
-		// Migración: bases creadas antes de la función de imágenes.
-		const prizeColumns = await client.execute("PRAGMA table_info(prizes)");
+			await connection.query(
+				`INSERT IGNORE INTO wheel_settings (id, alignment_offset, initial_angle, updated_at) VALUES (?, ?, ?)`,
+				[
+					WHEEL_DEFAULT_ALIGNMENT_OFFSET,
+					WHEEL_DEFAULT_INITIAL_ANGLE,
+					new Date().toISOString(),
+				],
+			);
+
+			await connection.commit();
+		} catch (error) {
+			await connection.rollback();
+			throw error;
+		} finally {
+			connection.release();
+		}
+
+		// Migración: columna image en prizes
+		const prizeColumns = await client.execute("SHOW COLUMNS FROM prizes");
 		const hasImageColumn = prizeColumns.rows.some(
-			(column) => column.name === "image",
+			(column) => column.Field === "image",
 		);
 		if (!hasImageColumn) {
 			await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
 			console.log("[db] Columna 'image' agregada a la tabla prizes.");
 		}
 
-		// Migración: columna label_mode para controlar visibilidad del nombre.
+		// Migración: columna label_mode
 		const hasLabelModeColumn = prizeColumns.rows.some(
-			(column) => column.name === "label_mode",
+			(column) => column.Field === "label_mode",
 		);
 		if (!hasLabelModeColumn) {
 			await client.execute(
@@ -270,58 +335,37 @@ async function ensureInitialized(): Promise<Client> {
 			console.log("[db] Columna 'label_mode' agregada a la tabla prizes.");
 		}
 
-		// Migración: columna is_spin_again para casillas "Inténtalo de nuevo".
-		const spinAgainColumns = await client.execute("PRAGMA table_info(prizes)");
-		const hasSpinAgainColumn = spinAgainColumns.rows.some(
-			(column) => column.name === "is_spin_again",
+		// Migración: columna is_spin_again
+		const hasSpinAgainColumn = prizeColumns.rows.some(
+			(column) => column.Field === "is_spin_again",
 		);
 		if (!hasSpinAgainColumn) {
 			await client.execute(
-				"ALTER TABLE prizes ADD COLUMN is_spin_again BOOLEAN NOT NULL DEFAULT 0",
+				"ALTER TABLE prizes ADD COLUMN is_spin_again TINYINT(1) NOT NULL DEFAULT 0",
 			);
 			console.log("[db] Columna 'is_spin_again' agregada a la tabla prizes.");
 		}
 
-		// Migración: sector fijo de la ruleta (0-5).
-		const sectorColumns = await client.execute("PRAGMA table_info(prizes)");
-		const hasSectorColumn = sectorColumns.rows.some(
-			(column) => column.name === "sector_index",
+		// Migración: columna sector_index
+		const hasSectorColumn = prizeColumns.rows.some(
+			(column) => column.Field === "sector_index",
 		);
 		if (!hasSectorColumn) {
-			await client.execute(
-				"ALTER TABLE prizes ADD COLUMN sector_index INTEGER",
-			);
+			await client.execute("ALTER TABLE prizes ADD COLUMN sector_index INTEGER");
 			console.log("[db] Columna 'sector_index' agregada a la tabla prizes.");
 			await backfillSectorIndexes(client);
 		}
 
-		// Migración: posición y escala del bloque PNG de la ruleta.
-		const wheelSettingsColumns = await client.execute(
-			"PRAGMA table_info(wheel_settings)",
-		);
+		// Migración: columnas de wheel_settings
+		const wheelSettingsColumns = await client.execute("SHOW COLUMNS FROM wheel_settings");
 		const wheelColumnNames = new Set(
-			wheelSettingsColumns.rows.map((column) => column.name),
+			wheelSettingsColumns.rows.map((column) => column.Field),
 		);
-		const wheelColumnMigrations: Array<{
-			name: string;
-			sql: string;
-		}> = [
-			{
-				name: "disk_offset_x",
-				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_x REAL NOT NULL DEFAULT 0",
-			},
-			{
-				name: "disk_offset_y",
-				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_y REAL NOT NULL DEFAULT 16",
-			},
-			{
-				name: "disk_scale",
-				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_scale REAL NOT NULL DEFAULT 1",
-			},
-			{
-				name: "disk_rotation",
-				sql: "ALTER TABLE wheel_settings ADD COLUMN disk_rotation REAL NOT NULL DEFAULT 0",
-			},
+		const wheelColumnMigrations: Array<{ name: string; sql: string }> = [
+			{ name: "disk_offset_x", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_x REAL NOT NULL DEFAULT 0" },
+			{ name: "disk_offset_y", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_y REAL NOT NULL DEFAULT 16" },
+			{ name: "disk_scale", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_scale REAL NOT NULL DEFAULT 1" },
+			{ name: "disk_rotation", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_rotation REAL NOT NULL DEFAULT 0" },
 		];
 		for (const migration of wheelColumnMigrations) {
 			if (wheelColumnNames.has(migration.name)) continue;
@@ -331,7 +375,7 @@ async function ensureInitialized(): Promise<Client> {
 			);
 		}
 
-		// Migraciones del sistema de tickets (idempotentes).
+		// Migraciones del sistema de tickets (idempotentes, desde migrations.ts)
 		const appliedMigrations = await runMigrations(client);
 		for (const id of appliedMigrations) {
 			console.log(`[db] Migración aplicada: ${id}`);
@@ -349,12 +393,17 @@ async function ensureInitialized(): Promise<Client> {
 					sql: "INSERT INTO roulettes (name, is_active) VALUES (?, ?)",
 					args: [template.name, template.isActive ? 1 : 0],
 				});
-				const rouletteId = Number(inserted.lastInsertRowid ?? 0);
+				const rouletteId = Number(
+					(Array.isArray(inserted.rows) && inserted.rows.length > 0
+						? inserted.rows[0].insertId
+						: 0) ?? 0,
+				);
 
 				if (template.prizes.length > 0) {
 					await client.batch(
 						template.prizes.map((prize) => ({
-							sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+							sql:
+								"INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
 							args: [
 								rouletteId,
 								prize.name,
@@ -372,7 +421,6 @@ async function ensureInitialized(): Promise<Client> {
 			console.log("[db] Base vacía: plantillas iniciales creadas.");
 		}
 
-		db = client;
 		return client;
 	})();
 
@@ -385,7 +433,7 @@ async function ensureInitialized(): Promise<Client> {
 	}
 }
 
-export async function getDb(): Promise<Client> {
+export async function getDb(): Promise<DbClient> {
 	return ensureInitialized();
 }
 
@@ -450,7 +498,11 @@ export async function createRoulette(
 		sql: "INSERT INTO roulettes (name, is_active) VALUES (?, 0)",
 		args: [name],
 	});
-	const rouletteId = Number(inserted.lastInsertRowid ?? 0);
+	const rouletteId = Number(
+		(Array.isArray(inserted.rows) && inserted.rows.length > 0
+			? inserted.rows[0].insertId
+			: 0) ?? 0,
+	);
 
 	const sectorPrizes = normalizeSectorPrizes(rouletteId, prizes);
 	await client.batch(
@@ -639,14 +691,14 @@ export async function saveWheelCalibration(
 	await client.execute({
 		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, updated_at)
               VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (id) DO UPDATE SET
-                alignment_offset = excluded.alignment_offset,
-                initial_angle = excluded.initial_angle,
-                disk_offset_x = excluded.disk_offset_x,
-                disk_offset_y = excluded.disk_offset_y,
-                disk_scale = excluded.disk_scale,
-                disk_rotation = excluded.disk_rotation,
-                updated_at = excluded.updated_at`,
+              ON DUPLICATE KEY UPDATE
+                alignment_offset = VALUES(alignment_offset),
+                initial_angle = VALUES(initial_angle),
+                disk_offset_x = VALUES(disk_offset_x),
+                disk_offset_y = VALUES(disk_offset_y),
+                disk_scale = VALUES(disk_scale),
+                disk_rotation = VALUES(disk_rotation),
+                updated_at = VALUES(updated_at)`,
 		args: [
 			calibration.alignmentOffset,
 			calibration.initialAngle,

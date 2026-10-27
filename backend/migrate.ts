@@ -5,22 +5,13 @@
  */
 
 import "./env";
-import { createClient } from "@libsql/client/web";
 import { runMigrations } from "./migrations";
+import { getDb } from "./database";
 
 async function main() {
-	const url = process.env.TURSO_DATABASE_URL;
-	const authToken = process.env.TURSO_AUTH_TOKEN;
-
-	if (!url || !authToken) {
-		console.error(
-			"❌ TURSO_DATABASE_URL y TURSO_AUTH_TOKEN deben estar configurados.",
-		);
-		process.exit(1);
-	}
-
-	const client = createClient({ url, authToken });
 	console.log("🔄 Aplicando migraciones...");
+
+	const client = await getDb();
 
 	const applied = await runMigrations(client);
 
@@ -31,8 +22,6 @@ async function main() {
 			console.log(`✅ Migración aplicada: ${id}`);
 		}
 	}
-
-	client.close();
 }
 
 main().catch((error) => {

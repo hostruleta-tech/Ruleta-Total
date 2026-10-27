@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import JSZip from "jszip";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../database";
 import { decryptTicketToken, encryptTicketToken } from "./crypto";
 import { TicketNotFoundError, TicketValidationError } from "./errors";
 import { QR_PRINT_WIDTH, QR_PREVIEW_WIDTH, renderQrPng, renderQrPngDataUrl } from "./qr";
@@ -109,7 +109,7 @@ function normalizeExpiry(value: unknown): string | null {
  * se guardan su hash y su versión cifrada (para reimpresión).
  */
 export async function createTickets(
-	client: Client,
+	client: DbClient,
 	options: CreateTicketsOptions = {},
 ): Promise<CreateTicketsResult> {
 	const quantity = normalizeQuantity(options.quantity);
@@ -192,7 +192,7 @@ export async function createTickets(
 
 /** PNG de un ticket concreto, para descarga individual o reimpresión. */
 export async function renderTicketQr(
-	client: Client,
+	client: DbClient,
 	ticketId: string,
 ): Promise<Buffer> {
 	const secret = await getTicketSecretById(client, ticketId);
@@ -205,7 +205,7 @@ export async function renderTicketQr(
 
 /** Data URL de un ticket concreto, para vista previa en panel. */
 export async function renderTicketQrDataUrl(
-	client: Client,
+	client: DbClient,
 	ticketId: string,
 ): Promise<string> {
 	const secret = await getTicketSecretById(client, ticketId);
@@ -227,7 +227,7 @@ function toPreview(secret: TicketSecretRow): Promise<TicketPreview> {
 
 /** Devuelve data URLs QR para TODOS los tickets de un lote (panel operador). */
 export async function getBatchQrDataUrls(
-	client: Client,
+	client: DbClient,
 	batchId: string,
 ): Promise<Record<string, string>> {
 	const secrets = await listBatchTicketSecrets(client, batchId);
@@ -242,7 +242,7 @@ export async function getBatchQrDataUrls(
 
 /** Detalle de un lote con las primeras vistas previas para el panel. */
 export async function getBatchDetail(
-	client: Client,
+	client: DbClient,
 	batchId: string,
 	options: { onlyActivePreviews?: boolean } = {}
 ): Promise<BatchDetail> {
@@ -284,7 +284,7 @@ function csvCell(value: string | null): string {
  * @param includeAll Si true, incluye tickets canjeados y anulados (para auditoría).
  */
 export async function buildBatchQrZip(
-	client: Client,
+	client: DbClient,
 	batchId: string,
 	includeAll = false
 ): Promise<BatchZip> {

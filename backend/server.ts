@@ -6,7 +6,12 @@ import { router } from "./app";
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: [], // <- sobrescribir con lista explícita de dominios produción (admin)
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Operator-Password"],
+}));
 app.use(express.json({ limit: "4mb" }));
 
 // Mount the router at /api (frontend) and /api-ruleta (backwards compatibility).

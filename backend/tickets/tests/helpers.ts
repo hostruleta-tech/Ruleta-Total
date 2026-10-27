@@ -1,4 +1,5 @@
-import { createClient, type Client } from "@libsql/client";
+import mysql from "mysql2/promise";
+import { getDb } from "../../database";
 import { runMigrations } from "../../migrations";
 
 export const TEST_KEY = Buffer.alloc(32, 7).toString("base64");
@@ -42,10 +43,16 @@ export function restoreEnv(saved: SavedEnv): void {
 	}
 }
 
-export async function createTestClient(): Promise<Client> {
-	const client = createClient({ url: ":memory:" });
-	await runMigrations(client);
-	return client;
+export async function createTestClient(): Promise<mysql.Pool> {
+	const connection = await mysql.createConnection({
+		host: process.env.MARIADB_HOST ?? "127.0.0.1",
+		port: Number(process.env.MARIADB_PORT ?? 3306),
+		database: process.env.MARIADB_DATABASE,
+		user: process.env.MARIADB_USER,
+		password: process.env.MARIADB_PASSWORD,
+	});
+
+	return connection;
 }
 
 export function tokenFromParticipationUrl(url: string): string {

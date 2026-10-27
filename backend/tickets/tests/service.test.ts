@@ -2,7 +2,7 @@
 import JSZip from "jszip";
 import { PNG } from "pngjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../../database";
 import { decryptTicketToken } from "../crypto";
 import { TicketNotFoundError, TicketValidationError } from "../errors";
 import {
@@ -40,7 +40,7 @@ function decodeBase64Png(dataUrl: string): string {
 }
 
 describe("persistencia de tickets", () => {
-	let client: Client;
+	let client: DbClient;
 	let saved: ReturnType<typeof setTestEnv>;
 
 	beforeEach(async () => {

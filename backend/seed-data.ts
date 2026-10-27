@@ -1,3 +1,4 @@
+#!/usr/bin/env tsx
 /**
  * Datos iniciales de las plantillas.
  * Se usan tanto en el seed manual (backend/seed.ts) como en el
@@ -6,7 +7,6 @@
  * La ruleta tiene 6 sectores fijos. Cada plantilla debe tener exactamente
  * una entrada por sector, con `sectorIndex` de 0 a 5.
  */
-
 export interface SeedPrize {
 	name: string;
 	backgroundColor: string;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../database";
 import { requireOperator } from "../auth/session";
 import {
 	TicketConfigError,
@@ -151,7 +151,7 @@ function handleError(
  *   GET    /api/tickets/:id       - Metadatos ticket
  *   POST   /api/tickets/:id/void  - Anula ticket (void)
  */
-export function createTicketsRouter(getClient: () => Promise<Client>): Router {
+export function createTicketsRouter(getClient: () => Promise<DbClient>): Router {
 	const router = Router();
 
 	// ==================== RUTAS PÚBLICAS (sin contraseña) ====================

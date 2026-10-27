@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../../database";
 import { createTicketsRouter } from "../router";
 import {
 	createTestClient,
@@ -11,7 +11,7 @@ import {
 } from "./helpers";
 
 describe("API de tickets", () => {
-	let client: Client;
+	let client: DbClient;
 	let app: Express;
 	let saved: ReturnType<typeof setTestEnv>;
 

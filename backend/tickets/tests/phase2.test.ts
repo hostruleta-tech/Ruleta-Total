@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Client } from "@libsql/client";
+import type { DbClient } from "../../database";
 import {
 	redeemTicket,
 	releaseReservation,
@@ -24,7 +24,7 @@ import { router as apiRouter } from "../../app";
 const PRIZE = { prizeId: 7, prizeName: "Café gratis", rouletteId: 1 };
 
 describe("Fase 2: reserva y canje", () => {
-	let client: Client;
+	let client: DbClient;
 	let ticketsApp: Express;
 	let spinApp: Express;
 	let saved: ReturnType<typeof setTestEnv>;
