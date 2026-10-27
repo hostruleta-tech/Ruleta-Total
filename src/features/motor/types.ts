@@ -29,6 +29,8 @@ export interface RouletteItem {
   labelMode?: LabelMode | null;
   /** Casilla "Inténtalo de nuevo": no consume el ticket y permite girar otra vez. */
   isSpinAgain?: boolean;
+  /** Sector fijo de la ruleta (0-5). Lo asigna el backend, no se edita en el panel. */
+  sectorIndex?: number | null;
 }
 
 interface CanvasStyle {

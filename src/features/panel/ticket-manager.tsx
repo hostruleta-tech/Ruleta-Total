@@ -10,7 +10,6 @@ import {
 	RotateCcw,
 	Search,
 	Ticket as TicketIcon,
-	Trash2,
 	Calendar,
 	Tag,
 	Eye,
@@ -120,16 +119,6 @@ const STATUS_ICONS: Record<TicketStatus, React.ReactNode> = {
 
 function shortId(id: string): string {
 	return id.slice(0, 8).toUpperCase();
-}
-
-function formatDate(value: string | null): string {
-	if (!value) return "—";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "Fecha inválida";
-	return new Intl.DateTimeFormat("es-VE", {
-		dateStyle: "short",
-		timeStyle: "short",
-	}).format(date);
 }
 
 function downloadBlob(blob: Blob, filename: string): void {

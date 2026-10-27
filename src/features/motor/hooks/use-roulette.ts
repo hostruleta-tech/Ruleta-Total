@@ -11,12 +11,15 @@ export const useRoulette = ({
   onSpinUp,
   onSpinDown,
   onSpinEnd,
+  onRotationChange,
   options = {},
 }: {
   items: RouletteItem[];
   onSpinUp?: () => void;
   onSpinDown?: () => void;
   onSpinEnd?: (result: string) => void;
+  /** Sincroniza una capa visual (p. ej. imagen giratoria) con la rotación. */
+  onRotationChange?: (totalRotation: number) => void;
   options?: Partial<RouletteOptions>;
 }): {
   roulette: RouletteCanvas;
@@ -83,7 +86,7 @@ export const useRoulette = ({
   const itemsRef = useRef(items);
   const mergedOptionsRef = useRef(mergedOptions);
   const geometryRef = useRef(geometry);
-  const callbacksRef = useRef({ onSpinUp, onSpinDown, onSpinEnd });
+  const callbacksRef = useRef({ onSpinUp, onSpinDown, onSpinEnd, onRotationChange });
   // Índice objetivo del premio ganador (venido del servidor).
   const targetWinnerIndexRef = useRef<number | undefined>(undefined);
 
@@ -91,10 +94,24 @@ export const useRoulette = ({
     itemsRef.current = items;
     mergedOptionsRef.current = mergedOptions;
     geometryRef.current = geometry;
-    callbacksRef.current = { onSpinUp, onSpinDown, onSpinEnd };
+    callbacksRef.current = { onSpinUp, onSpinDown, onSpinEnd, onRotationChange };
   });
 
   const [status, setStatus] = useState<"stop" | "running" | "ending">("stop");
+
+  // Reaplica la pose inicial solo si cambia estando detenido. Un giro normal
+  // termina en el sector ganador (no en `initialAngle`), así que comparamos el
+  // valor previo para NO resetear la ruleta al final de cada giro.
+  const lastInitialAngleRef = useRef(mergedOptions.initialAngle);
+  useEffect(() => {
+    if (status !== "stop") return;
+    const nextAngle = mergedOptions.initialAngle;
+    if (lastInitialAngleRef.current !== nextAngle) {
+      lastInitialAngleRef.current = nextAngle;
+      rouletteRef.current.totalRotation = ((nextAngle % 360) + 360) % 360;
+      callbacksRef.current.onRotationChange?.(rouletteRef.current.totalRotation);
+    }
+  }, [status, mergedOptions.initialAngle]);
   // Se incrementa cuando terminan de cargar las imágenes, para redibujar la
   // ruleta quieta con los premios ya completos.
   const [imageVersion, setImageVersion] = useState(0);
@@ -216,6 +233,7 @@ export const useRoulette = ({
       geometry: geometryRef.current,
       rouletteRef,
       targetWinnerIndex: targetWinnerIndexRef.current,
+      onRotationChange: callbacksRef.current.onRotationChange,
       onFinish: (rouletteResult: string) => {
         setStatus("stop");
         resultRef.current = rouletteResult;

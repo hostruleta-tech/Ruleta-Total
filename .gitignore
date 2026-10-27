@@ -38,5 +38,8 @@ backend/db.json
 *.db
 *.db-journal
 
+# Copias de seguridad locales
+/backups/
+
 # Herramientas locales de OpenCode
 .opencode/

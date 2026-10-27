@@ -7,6 +7,7 @@
 
 import "./env";
 import { createClient } from "@libsql/client/web";
+import { backfillSectorIndexes } from "./database";
 import { SEED_TEMPLATES } from "./seed-data";
 
 async function main() {
@@ -48,6 +49,7 @@ async function main() {
             backgroundColor TEXT NOT NULL,
             probability REAL NOT NULL,
             image TEXT,
+            sector_index INTEGER,
             FOREIGN KEY (roulette_id) REFERENCES roulettes (id) ON DELETE CASCADE
           )
         `,
@@ -64,6 +66,18 @@ async function main() {
 	if (!prizeColumns.rows.some((column) => column.name === "image")) {
 		await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
 		console.log("✅ Columna 'image' agregada a la tabla prizes");
+	}
+
+	const sectorColumns = await client.execute("PRAGMA table_info(prizes)");
+	const hasSectorColumn = sectorColumns.rows.some(
+		(column) => column.name === "sector_index",
+	);
+	if (!hasSectorColumn) {
+		await client.execute("ALTER TABLE prizes ADD COLUMN sector_index INTEGER");
+		console.log("✅ Columna 'sector_index' agregada a la tabla prizes");
+		// Asigna los sectores a las plantillas que ya existían y elimina los
+		// premios sobrantes de la plantilla activa.
+		await backfillSectorIndexes(client);
 	}
 
 	for (const tmpl of SEED_TEMPLATES) {
@@ -89,13 +103,14 @@ async function main() {
 		if (tmpl.prizes.length > 0) {
 			await client.batch(
 				tmpl.prizes.map((prize) => ({
-					sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, is_spin_again) VALUES (?, ?, ?, ?, ?)",
+					sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?)",
 					args: [
 						rouletteId,
 						prize.name,
 						prize.backgroundColor,
 						prize.probability,
 						prize.isSpinAgain ? 1 : 0,
+						prize.sectorIndex,
 					],
 				})),
 				"write",

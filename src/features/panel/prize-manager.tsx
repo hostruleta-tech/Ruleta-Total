@@ -1,18 +1,16 @@
-import { GripVertical, Pencil, Plus, TrashIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/shared/api";
-import { GREEN_PALETTE, nextGreen } from "@/shared/prize-colors";
+import { GREEN_PALETTE } from "@/shared/prize-colors";
 import { PrizeImageInput } from "./prize-image-input";
 import { useOperatorAuth } from "./operator-auth-context";
 import { translateMessage } from "./panel-messages";
 import { useToast } from "./panel-toast";
-import { cn } from "@/shared/lib/utils";
 import {
 	BrandButton,
 	BrandCard,
 	BrandColorInput,
 	BrandInput,
-	BrandLabel,
 	SectionHeading,
 } from "./panel-ui";
 
@@ -29,6 +27,8 @@ export interface Prize {
 	labelMode?: LabelMode | null;
 	/** Casilla "Inténtalo de nuevo": no consume el ticket y permite girar otra vez. */
 	isSpinAgain?: boolean;
+	/** Sector fijo de la ruleta (0-5). Solo lectura desde el panel. */
+	sectorIndex?: number | null;
 }
 
 interface PrizeManagerProps {
@@ -37,11 +37,36 @@ interface PrizeManagerProps {
 	onSaved?: () => void;
 }
 
-/** Rejilla compartida por las filas de premio y la fila de alta. */
-const ROW_BASE =
-	"grid grid-cols-[2rem_2.5rem_3.5rem_minmax(0,1fr)_3rem_2.25rem_2.5rem] items-center gap-2";
-const ROW_GRID = `${ROW_BASE} md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem]`;
-const ADD_ROW_GRID = `${ROW_BASE} md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_auto_2.5rem]`;
+const SECTOR_COUNT = 6;
+
+const ROW_GRID =
+	"grid gap-3 border-b border-slate-200 py-3 last:border-b-0 md:grid-cols-[3rem_minmax(0,1fr)_auto] md:items-center md:gap-4";
+const FIELD_GRID =
+	"grid grid-cols-2 items-center gap-2 sm:grid-cols-5 md:grid-cols-[2.5rem_7.5rem_5.5rem_4.5rem_4rem]";
+
+/** Devuelve el siguiente verde de la paleta para un sector. */
+const sectorColor = (index: number): string =>
+	GREEN_PALETTE[index % GREEN_PALETTE.length];
+
+/** Comprueba que existan los 6 sectores exactamente una vez. */
+const hasAllSectors = (prizes: Prize[]): boolean => {
+	if (prizes.length !== SECTOR_COUNT) return false;
+	const sectors = new Set<number>();
+	for (const prize of prizes) {
+		const sector = prize.sectorIndex;
+		if (
+			typeof sector !== "number" ||
+			!Number.isInteger(sector) ||
+			sector < 0 ||
+			sector >= SECTOR_COUNT ||
+			sectors.has(sector)
+		) {
+			return false;
+		}
+		sectors.add(sector);
+	}
+	return sectors.size === SECTOR_COUNT;
+};
 
 export const PrizeManager: React.FC<PrizeManagerProps> = ({
 	templateId,
@@ -49,17 +74,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 }) => {
 	const [prizes, setPrizes] = useState<Prize[]>([]);
 	const [templateName, setTemplateName] = useState("");
-	const [newPrize, setNewPrize] = useState<Omit<Prize, "id" | "roulette_id">>({
-		name: "",
-		backgroundColor: GREEN_PALETTE[0],
-		probability: 10,
-		image: null,
-		labelMode: "both",
-		isSpinAgain: false,
-	});
 	const [isLoading, setIsLoading] = useState<boolean>(false);
-	const [dragIndex, setDragIndex] = useState<number | null>(null);
-	const dragOverIndex = useRef<number | null>(null);
 	const toast = useToast();
 	const { operatorFetch } = useOperatorAuth();
 
@@ -69,22 +84,52 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			try {
 				const response = await apiFetch(`/roulettes/${templateId}`);
 				const data = await response.json();
-				const loadedPrizes: Prize[] = data.prizes || [];
-				setPrizes(loadedPrizes);
-				setTemplateName(data.name);
-				// El próximo premio arranca con el siguiente verde de la paleta.
-				setNewPrize((prev) => ({
-					...prev,
-					backgroundColor: nextGreen(loadedPrizes.length),
-				}));
+				const loadedPrizes: Prize[] = Array.isArray(data.prizes)
+					? data.prizes
+					: [];
+
+				// La ruleta siempre debe mostrar los 6 sectores fijos. Si el
+				// backend no enviara alguno, se completa localmente para que el
+				// operador pueda configurarlo.
+				const normalized: Prize[] = Array.from(
+					{ length: SECTOR_COUNT },
+					(_, sectorIndex) => {
+						const existing = loadedPrizes.find(
+							(prize) => prize.sectorIndex === sectorIndex,
+						);
+						return (
+							existing ?? {
+								roulette_id: templateId,
+								name: `Premio ${sectorIndex + 1}`,
+								backgroundColor: sectorColor(sectorIndex),
+								probability: 10,
+								image: null,
+								labelMode: "both",
+								isSpinAgain: false,
+								sectorIndex,
+							}
+						);
+					},
+				);
+
+				setPrizes(normalized);
+				setTemplateName(data.name ?? "");
 			} catch (error) {
 				console.error("Failed to fetch prizes", error);
 			}
 		};
+
 		fetchPrizes();
 	}, [templateId]);
 
 	const handleSaveConfiguration = async () => {
+		if (!hasAllSectors(prizes)) {
+			toast.error(
+				"La ruleta necesita exactamente los 6 sectores configurados.",
+			);
+			return;
+		}
+
 		setIsLoading(true);
 		try {
 			const response = await operatorFetch(`/roulettes/${templateId}`, {
@@ -108,67 +153,14 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		}
 	};
 
-	const handleAddPrize = () => {
-		// Permitir nombre vacío si hay imagen
-		if (newPrize.name.trim() === "" && !newPrize.image) return;
-		setPrizes([
-			...prizes,
-			{
-				...newPrize,
-				probability: Number(newPrize.probability) || 0,
-				roulette_id: templateId,
-			},
-		]);
-		setNewPrize({
-			name: "",
-			backgroundColor: nextGreen(prizes.length + 1),
-			probability: 10,
-			image: null,
-			labelMode: "both",
-			isSpinAgain: false,
-		});
-	};
-
-	const handleRemovePrize = (index: number) => {
-		setPrizes(prizes.filter((_, i) => i !== index));
-	};
-
-	const handleDragStart = (index: number) => {
-		setDragIndex(index);
-	};
-
-	const handleDragOver = (e: React.DragEvent, index: number) => {
-		e.preventDefault();
-		dragOverIndex.current = index;
-	};
-
-	const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-		e.preventDefault();
-		if (dragIndex === null || dragIndex === dropIndex) return;
-		setPrizes((prev) => {
-			const updated = [...prev];
-			const [moved] = updated.splice(dragIndex, 1);
-			updated.splice(dropIndex, 0, moved);
-			return updated;
-		});
-		setDragIndex(null);
-		dragOverIndex.current = null;
-	};
-
-	const handleDragEnd = () => {
-		setDragIndex(null);
-		dragOverIndex.current = null;
-	};
-
 	const handlePrizeChange = (
-		index: number,
+		sectorIndex: number,
 		field: keyof Prize,
 		value: string | number | boolean | null,
 	) => {
 		setPrizes((prev) =>
-			prev.map((prize, i) => {
-				if (i !== index) return prize;
-				// Asegurarse de que la probabilidad sea un número
+			prev.map((prize) => {
+				if (prize.sectorIndex !== sectorIndex) return prize;
 				if (field === "probability") {
 					return { ...prize, probability: Number(value) || 0 };
 				}
@@ -200,15 +192,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 		if (totalWeight <= 0 || !Number.isFinite(weight) || weight <= 0) return "—";
 		return `${((weight / totalWeight) * 100).toFixed(1)}%`;
 	};
-	const newPrizeRealProbability = (() => {
-		const weight =
-			Number.isFinite(newPrize.probability) && newPrize.probability > 0
-				? newPrize.probability
-				: 0;
-		if (weight <= 0) return "—";
-		const total = totalWeight + weight;
-		return `${((weight / total) * 100).toFixed(1)}%`;
-	})();
+	const sectorsReady = hasAllSectors(prizes);
 
 	return (
 		<div className="flex min-w-0 flex-col gap-3">
@@ -216,15 +200,18 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 				<SectionHeading
 					icon={Pencil}
 					title="Editar premios"
-					subtitle={`Sube una imagen por premio (el nombre es opcional si hay imagen) y luego toca en "Guardar cambios".`}
+					subtitle="La ruleta tiene 6 sectores fijos. Edita el contenido de cada sector; el mapeo no se puede cambiar desde el panel."
 				/>
 
 				<div className="mt-4 space-y-4">
 					{/* Nombre de la plantilla */}
 					<div className="grid max-w-md gap-1.5">
-						<BrandLabel htmlFor="template-name">
+						<label
+							htmlFor="template-name"
+							className="text-xs font-bold uppercase tracking-wide text-[#005f63]"
+						>
 							Nombre de la plantilla
-						</BrandLabel>
+						</label>
 						<BrandInput
 							id="template-name"
 							type="text"
@@ -244,62 +231,58 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 						</span>
 					</div>
 
-					{/* Lista de premios */}
-					<div className="space-y-2">
-						<div className="hidden px-1 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[2rem_minmax(0,1fr)_2.5rem_3.5rem_5.5rem_4.5rem_2.5rem_2.5rem] md:items-center md:gap-2 md:px-[13px]">
-							<span></span>
-							<span>Nombre</span>
+					{!sectorsReady && (
+						<div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+							Faltan sectores por configurar. La plantilla no podrá activarse
+							hasta tener los 6 sectores completos.
+						</div>
+					)}
+
+					{/* Cabecera de columnas (solo escritorio) */}
+					<div className="hidden border-b border-slate-200 pb-2 text-[11px] font-bold uppercase tracking-wide text-[#005f63] md:grid md:grid-cols-[3rem_minmax(0,1fr)_auto] md:items-center md:gap-4">
+						<span className="text-center">Sector</span>
+						<span>Premio</span>
+						<div className={FIELD_GRID}>
 							<span className="text-center">Imagen</span>
 							<span className="text-center">Texto</span>
 							<span>Color</span>
-							<span>Peso</span>
+							<span className="text-center">Peso</span>
 							<span className="text-center">Real</span>
-							<span className="sr-only">Acciones</span>
 						</div>
+					</div>
 
-						<div className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50/60 px-2 md:px-3">
-							{prizes.length === 0 && (
-								<p className="py-5 text-center text-sm text-slate-500">
-									Aún no hay premios. Agrega el primero abajo.
-								</p>
-							)}
+					{/* Los 6 sectores fijos */}
+					<div className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-slate-50/60 px-2 md:px-3">
+						{prizes.map((prize, index) => {
+							const sectorIndex = prize.sectorIndex ?? index;
+							return (
+								<div key={sectorIndex} className={ROW_GRID}>
+									<div className="flex items-center gap-2 md:flex-col md:gap-0.5">
+										<span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#005f63] text-sm font-black text-white shadow-sm">
+											{sectorIndex + 1}
+										</span>
+										<span className="text-[10px] font-bold uppercase tracking-wide text-[#005f63] md:hidden">
+											Sector
+										</span>
+									</div>
 
-							{prizes.map((prize, index) => (
-								<div
-									// biome-ignore lint/suspicious/noArrayIndexKey: es la manera de identificar
-									key={index}
-									className={`${ROW_GRID} py-2 md:py-1.5 ${
-										dragIndex === index ? "opacity-40" : ""
-									} ${
-										dragOverIndex.current === index
-											? "bg-teal-100"
-											: ""
-									}`}
-									draggable
-									onDragStart={() => handleDragStart(index)}
-									onDragOver={(e) => handleDragOver(e, index)}
-									onDrop={(e) => handleDrop(e, index)}
-									onDragEnd={handleDragEnd}
-								>
-									<button
-										type="button"
-										className="flex h-9 w-full cursor-grab items-center justify-center text-slate-400 hover:text-slate-600 active:cursor-grabbing"
-										aria-label={`Reordenar premio ${index + 1}`}
-										tabIndex={-1}
-									>
-										<GripVertical className="h-4 w-4" />
-									</button>
-									<div className="col-span-5 md:col-span-1">
+									<div className="min-w-0">
 										<BrandInput
-											id={`prize-name-${index}`}
+											id={`prize-name-${sectorIndex}`}
 											type="text"
 											value={prize.name}
 											onChange={(e) =>
-												handlePrizeChange(index, "name", e.target.value)
+												handlePrizeChange(
+													sectorIndex,
+													"name",
+													e.target.value,
+												)
 											}
 											className="h-9"
-											placeholder={prize.image ? "Opcional (tiene imagen)" : "Nombre del premio"}
-											aria-label={`Nombre del premio ${index + 1}`}
+											placeholder={
+												prize.image ? "Opcional (tiene imagen)" : "Nombre del premio"
+											}
+											aria-label={`Nombre del premio del sector ${sectorIndex + 1}`}
 										/>
 										<label
 											className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-teal-700"
@@ -310,7 +293,7 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 												checked={prize.isSpinAgain === true}
 												onChange={(e) =>
 													handlePrizeChange(
-														index,
+														sectorIndex,
 														"isSpinAgain",
 														e.target.checked,
 													)
@@ -320,174 +303,77 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 											Inténtalo de nuevo
 										</label>
 									</div>
-									<PrizeImageInput
-										value={prize.image}
-										onChange={(image) => handlePrizeChange(index, "image", image)}
-										label={`premio ${index + 1}`}
-										className="justify-self-center md:justify-self-start"
-									/>
-									<div className="flex items-center justify-center">
+
+									<div className={FIELD_GRID}>
+										<PrizeImageInput
+											value={prize.image}
+											onChange={(image) =>
+												handlePrizeChange(sectorIndex, "image", image)
+											}
+											label={`sector ${sectorIndex + 1}`}
+											className="justify-self-center md:justify-self-start"
+										/>
 										<select
-											id={`prize-labelmode-${index}`}
+											id={`prize-labelmode-${sectorIndex}`}
 											value={prize.labelMode ?? "both"}
 											onChange={(e) =>
-												handlePrizeChange(index, "labelMode", e.target.value)
+												handlePrizeChange(
+													sectorIndex,
+													"labelMode",
+													e.target.value,
+												)
 											}
-											className="h-9 w-full max-w-[120px] text-xs text-center rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-slate-800 shadow-sm outline-none focus:border-[#005f63] focus:ring-2 focus:ring-[#005f63]/25"
-											aria-label={`Modo de texto del premio ${index + 1}`}
+											className="h-9 w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-800 shadow-sm outline-none focus:border-[#005f63] focus:ring-2 focus:ring-[#005f63]/25"
+											aria-label={`Modo de texto del sector ${sectorIndex + 1}`}
 										>
 											<option value="wheel">En la ruleta</option>
 											<option value="win">Solo al ganar</option>
 											<option value="both">Ambos</option>
 										</select>
+										<BrandColorInput
+											id={`prize-color-${sectorIndex}`}
+											value={prize.backgroundColor}
+											onChange={(e) =>
+												handlePrizeChange(
+													sectorIndex,
+													"backgroundColor",
+													e.target.value,
+												)
+											}
+											className="h-9"
+											aria-label={`Color del sector ${sectorIndex + 1}`}
+										/>
+										<BrandInput
+											id={`prize-probability-${sectorIndex}`}
+											type="number"
+											value={prize.probability}
+											onChange={(e) =>
+												handlePrizeChange(
+													sectorIndex,
+													"probability",
+													Number(e.target.value),
+												)
+											}
+											className="h-9 text-center"
+											placeholder="Peso"
+											aria-label={`Peso del sector ${sectorIndex + 1}`}
+										/>
+										<span
+											className="text-center text-xs font-medium tabular-nums text-teal-600"
+											title={`Probabilidad real del sector ${sectorIndex + 1}`}
+										>
+											{getRealProbability(prize.probability)}
+										</span>
 									</div>
-									<BrandColorInput
-										id={`prize-color-${index}`}
-										value={prize.backgroundColor}
-										onChange={(e) =>
-											handlePrizeChange(
-												index,
-												"backgroundColor",
-												e.target.value,
-											)
-										}
-										className="h-9"
-										aria-label={`Color del premio ${index + 1}`}
-									/>
-									<BrandInput
-										id={`prize-probability-${index}`}
-										type="number"
-										value={prize.probability}
-										onChange={(e) =>
-											handlePrizeChange(
-												index,
-												"probability",
-												Number(e.target.value),
-											)
-										}
-										className="h-9 text-center"
-										placeholder="Peso"
-										aria-label={`Peso del premio ${index + 1}`}
-									/>
-									<span
-										className="text-center text-xs font-medium tabular-nums text-teal-600"
-										title={`Probabilidad real del premio ${index + 1}`}
-									>
-										{getRealProbability(prize.probability)}
-									</span>
-									<BrandButton
-										onClick={() => handleRemovePrize(index)}
-										variant="danger"
-										size="icon"
-										className="h-9 w-9"
-										aria-label={`Eliminar premio ${index + 1}`}
-									>
-										<TrashIcon />
-									</BrandButton>
 								</div>
-							))}
-						</div>
+							);
+						})}
 					</div>
 
-					{/* Agregar nuevo premio */}
-					<div className="rounded-2xl border border-dashed border-[#005f63]/40 bg-[#005f63]/5 p-2.5 md:p-3">
-						<div className={ADD_ROW_GRID}>
-							<div className="h-9" />
-							<div className="col-span-5 md:col-span-1">
-								<BrandInput
-									id="new-prize-name"
-									type="text"
-									placeholder={newPrize.image ? "Opcional (tiene imagen)" : "Nombre del nuevo premio"}
-									value={newPrize.name}
-									onChange={(e) =>
-										setNewPrize({ ...newPrize, name: e.target.value })
-									}
-									className="h-9"
-									aria-label="Nombre del nuevo premio"
-								/>
-								<label
-									className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-teal-700"
-									title="Al caer aquí no se consume el ticket y el cliente puede girar otra vez"
-								>
-									<input
-										type="checkbox"
-										checked={newPrize.isSpinAgain === true}
-										onChange={(e) =>
-											setNewPrize({
-												...newPrize,
-												isSpinAgain: e.target.checked,
-											})
-										}
-										className="h-3.5 w-3.5 accent-[#005f63]"
-									/>
-									Inténtalo de nuevo
-								</label>
-							</div>
-							<PrizeImageInput
-								value={newPrize.image}
-								onChange={(image) => setNewPrize({ ...newPrize, image })}
-								label="nuevo premio"
-								className="justify-self-center md:justify-self-start"
-							/>
-							<div className="flex items-center justify-center">
-								<select
-									id="new-prize-labelmode"
-									value={newPrize.labelMode ?? "both"}
-									onChange={(e) =>
-										setNewPrize({ ...newPrize, labelMode: e.target.value as LabelMode })
-									}
-									className="h-9 w-full max-w-[120px] text-xs text-center rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-slate-800 shadow-sm outline-none focus:border-[#005f63] focus:ring-2 focus:ring-[#005f63]/25"
-									aria-label="Modo de texto del nuevo premio"
-								>
-									<option value="wheel">En la ruleta</option>
-									<option value="win">Solo al ganar</option>
-									<option value="both">Ambos</option>
-								</select>
-							</div>
-							<BrandColorInput
-								id="new-prize-color"
-								value={newPrize.backgroundColor}
-								onChange={(e) =>
-									setNewPrize({
-										...newPrize,
-										backgroundColor: e.target.value,
-									})
-								}
-								className="h-9"
-								aria-label="Color del nuevo premio"
-							/>
-							<BrandInput
-								id="new-prize-probability"
-								type="number"
-								placeholder="Peso"
-								value={newPrize.probability}
-								onChange={(e) =>
-									setNewPrize({
-										...newPrize,
-										probability: Number(e.target.value),
-									})
-								}
-								className="h-9 text-center"
-								aria-label="Peso del nuevo premio"
-							/>
-							<span
-								className="text-center text-xs font-medium tabular-nums text-teal-600"
-								title="Probabilidad real del nuevo premio"
-							>
-								{newPrizeRealProbability}
-							</span>
-							<BrandButton
-								onClick={handleAddPrize}
-								variant="outline"
-								size="sm"
-								className="h-9 w-full px-0 md:w-auto md:px-4"
-								aria-label="Agregar premio"
-							>
-								<Plus className="h-4 w-4" />
-								<span className="hidden md:inline">Agregar</span>
-							</BrandButton>
-						</div>
-					</div>
+					<p className="text-xs font-medium text-slate-500">
+						Los 6 sectores están fijos. Para cambiar el mapeo de premios hay
+						que modificar el código.
+					</p>
 				</div>
 			</BrandCard>
 
@@ -495,13 +381,12 @@ export const PrizeManager: React.FC<PrizeManagerProps> = ({
 			<div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-lg backdrop-blur">
 				<div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
 					<p className="px-1 text-xs font-medium text-slate-500">
-						{prizes.length} {prizes.length === 1 ? "premio" : "premios"} · Total
-						de pesos{" "}
+						{prizes.length} de {SECTOR_COUNT} sectores · Total de pesos{" "}
 						<span className="font-mono text-slate-700">{totalWeight}</span>
 					</p>
 					<BrandButton
 						onClick={handleSaveConfiguration}
-						disabled={isLoading}
+						disabled={isLoading || !sectorsReady}
 						size="sm"
 						className="w-full sm:w-auto"
 					>

@@ -32,6 +32,11 @@ interface AnimateRouletteParams {
 	// Índice del premio ganador, ya decidido por el servidor.
 	// Si no se proporciona, se sortea internamente (compatibilidad/fallback).
 	targetWinnerIndex?: number;
+	/**
+	 * Notifica la rotación total (grados) en cada frame, para sincronizar una
+	 * versión visual (por ejemplo, una imagen giratoria) sin re-renderizar.
+	 */
+	onRotationChange?: (totalRotation: number) => void;
 }
 
 export const animateRoulette = ({
@@ -43,6 +48,7 @@ export const animateRoulette = ({
 	rouletteRef,
 	onFinish,
 	targetWinnerIndex,
+	onRotationChange,
 }: AnimateRouletteParams) => {
 	const getTotalRotation = calcTotalRotation(mergedOptions.rotationDirection);
 
@@ -117,6 +123,8 @@ export const animateRoulette = ({
 				endingStartRotation +
 				(endingTargetRotation - endingStartRotation) * eased;
 
+			onRotationChange?.(rouletteRef.current.totalRotation);
+
 			drawCanvas({
 				rouletteItemList,
 				mergedOptions,
@@ -129,6 +137,8 @@ export const animateRoulette = ({
 				rouletteRef.current.totalRotation =
 					((endingTargetRotation % 360) + 360) % 360;
 				rouletteRef.current.speed = 0;
+				// Sincroniza la rotación exacta final de la imagen.
+				onRotationChange?.(rouletteRef.current.totalRotation);
 				onFinish(endingWinnerName);
 				return;
 			}
@@ -145,6 +155,8 @@ export const animateRoulette = ({
 			rouletteRef.current.totalRotation,
 			curSpeed * deltaFrames,
 		);
+
+		onRotationChange?.(rouletteRef.current.totalRotation);
 
 		drawCanvas({
 			rouletteItemList,

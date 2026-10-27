@@ -5,9 +5,8 @@ import React, {
   useState,
 } from "react";
 import { Maximize, Minimize, LayoutDashboard, Bell } from "lucide-react";
-import { useRoulette } from "@/features/motor/hooks/use-roulette";
 import type { RouletteItem } from "@/features/motor/types";
-import { Roulette } from "@/features/motor/components/roulette";
+import { RouletteWheel, type RouletteWheelControls } from "./roulette-wheel";
 import { PrizeModal } from "./prize-modal";
 import { SpinAgainNotice } from "./spin-again-notice";
 import { soundManager } from "@/shared/sound-manager";
@@ -15,13 +14,13 @@ import { useFullscreen } from "@/shared/use-fullscreen";
 import { API_URL } from "@/shared/api";
 import { APP_FONT_FAMILY } from "@/shared/typography";
 import heroTaller from "@/assets/hero-taller.jpg";
-import logoTotal from "@/assets/logotipo-total.png";
 import { SiteHeader } from "@/shared/components/site-header";
 import { SiteFooter } from "@/shared/components/site-footer";
 
-// Grosor del marco cromado por lado (p-[9px] + p-[5px] + p-[1px]) + aire lateral
-const FRAME_THICKNESS = 15;
-const WHEEL_MARGIN = 8;
+// La ruleta ya no tiene marco cromado: el disco PNG trae su propio borde.
+// Solo se reserva aire lateral (y espacio para la flecha superior).
+const FRAME_THICKNESS = 0;
+const WHEEL_MARGIN = 24;
 const FRAME_PADDING = FRAME_THICKNESS * 2 + WHEEL_MARGIN;
 const MIN_WHEEL = 180;
 // Tope máximo para pantallas muy grandes
@@ -59,141 +58,12 @@ const useWheelSize = (areaRef: React.RefObject<HTMLDivElement | null>) => {
   return size;
 };
 
-/** Controles del motor expuestos al padre. */
-interface RouletteControls {
-  start: (targetIndex?: number) => void;
-}
-
-const RouletteGame: React.FC<{
-  items: RouletteItem[];
-  onPrizeWon: (prize: string) => void;
-  onSpinStart: () => void;
-  onSpinEnd: () => void;
-  size: number;
-  onControlsReady?: (controls: RouletteControls) => void;
-}> = ({
-  items,
-  onPrizeWon,
-  onSpinStart,
-  onSpinEnd,
-  size,
-  onControlsReady,
-}) => {
-  const { roulette, onStart } = useRoulette({
-    items,
-    onSpinUp: onSpinStart,
-    onSpinDown: onSpinEnd,
-    onSpinEnd: (result: string) => {
-      onPrizeWon(result);
-    },
-    options: {
-      size,
-      style: {
-        canvas: { bg: "#ffffff" },
-        label: {
-          font: `800 ${Math.max(14, Math.round(size * 0.05))}px ${APP_FONT_FAMILY}`,
-          align: "center",
-          baseline: "middle",
-          offset: 0.7,
-        },
-        arrow: { bg: "transparent" },
-        pie: {
-          borderWidth: 1.5,
-          borderColor: "#e2e8f0",
-          border: true,
-        },
-      },
-    },
-  });
-
-  useEffect(() => {
-    onControlsReady?.({ start: onStart });
-  }, [onControlsReady, onStart]);
-
-  return (
-    <div className="relative flex items-center justify-center">
-      {/* MARCO CROMADO EXTERIOR - más delgado */}
-      <div
-        className="relative rounded-full p-[9px] shadow-[0_18px_35px_rgba(0,0,0,0.5),0_6px_14px_rgba(0,0,0,0.35)]"
-        style={{
-          background:
-            "linear-gradient(145deg, #eef2f5 0%, #c3ccd3 20%, #6e7a84 45%, #aeb9c1 62%, #2a3238 85%, #151a1e 100%)",
-        }}
-      >
-        {/* BISEL INTERMEDIO (ANILLO DE PROFUNDIDAD) - más delgado */}
-        <div
-          className="relative rounded-full p-[5px] shadow-inner"
-          style={{
-            background:
-              "linear-gradient(135deg, #232a2f 0%, #6f7b84 40%, #cfd7db 62%, #171c1f 100%)",
-          }}
-        >
-          {/* CAPA BLANCA BAJO LA RULETA - más delgada */}
-          <div className="rounded-full bg-white p-[1px] overflow-hidden flex items-center justify-center">
-            <Roulette roulette={roulette} />
-          </div>
-        </div>
-      </div>
-
-      {/* FLECHA / PUNTERO 3D ROJO EN LA PARTE SUPERIOR */}
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.4)]">
-        <svg
-          width="42"
-          height="48"
-          viewBox="0 0 42 48"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M21 46L3.67949 11.5C1.75499 7.66987 4.54486 3 8.84937 3H33.1506C37.4551 3 40.245 7.66987 38.3205 11.5L21 46Z"
-            fill="url(#arrow-gradient)"
-            stroke="#8f0000"
-            strokeWidth="1.5"
-          />
-          <defs>
-            <linearGradient
-              id="arrow-gradient"
-              x1="4"
-              y1="3"
-              x2="38"
-              y2="46"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop stopColor="#ff4d4d" />
-              <stop offset="0.45" stopColor="#e30613" />
-              <stop offset="1" stopColor="#8a0007" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-
-      {/* CENTRO DE LA RULETA (TOTAL BADGE) */}
-      <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 rounded-full p-[6px] shadow-[0_5px_16px_rgba(0,0,0,0.55)] pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(135deg, #cdd5db 0%, #4d585f 50%, #e8edf0 100%)",
-          width: Math.round(size * 0.28),
-          height: Math.round(size * 0.28),
-        }}
-      >
-        <div className="w-full h-full rounded-full bg-[#035157] flex items-center justify-center border-2 border-white/80 shadow-inner">
-          <img
-            src={logoTotal}
-            alt="TOTAL"
-            draggable={false}
-            className="w-[72%] h-auto object-contain select-none drop-shadow-md"
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
-
 interface SpinResponse {
   claimCode?: string;
   ticketId?: string;
   prizeIndex: number;
+  /** Sector (0-5) del premio ganador en la ruleta PNG. */
+  prizeSector?: number;
   prize: string;
   prizeImageUrl?: string | null;
   /** true cuando la casilla ganadora es "Inténtalo de nuevo". */
@@ -205,9 +75,11 @@ interface SpinResponse {
     imageUrl?: string | null;
     labelMode?: "wheel" | "win" | "both";
     isSpinAgain?: boolean;
+    sectorIndex?: number | null;
   }[];
   rouletteId: number;
   demo?: boolean;
+  sectorCount?: number;
 }
 
 /** Estado del ticket leído desde el fragmento de la URL. */
@@ -247,6 +119,36 @@ function ticketReasonMessage(reason?: string): string {
   }
 }
 
+const WHEEL_SECTOR_COUNT = 6;
+
+/** Ordena los premios por sector fijo (0-5). Los sin sector van al final. */
+const sortBySector = (prizes: RouletteItem[]): RouletteItem[] =>
+  [...prizes].sort(
+    (a, b) =>
+      (a.sectorIndex ?? Number.MAX_SAFE_INTEGER) -
+      (b.sectorIndex ?? Number.MAX_SAFE_INTEGER),
+  );
+
+/** Comprueba que existan exactamente los 6 sectores, uno de cada. */
+const hasAllSectors = (items: RouletteItem[] | null): boolean => {
+  if (!items || items.length !== WHEEL_SECTOR_COUNT) return false;
+  const sectors = new Set<number>();
+  for (const item of items) {
+    const sector = item.sectorIndex;
+    if (
+      typeof sector !== "number" ||
+      !Number.isInteger(sector) ||
+      sector < 0 ||
+      sector >= WHEEL_SECTOR_COUNT ||
+      sectors.has(sector)
+    ) {
+      return false;
+    }
+    sectors.add(sector);
+  }
+  return sectors.size === WHEEL_SECTOR_COUNT;
+};
+
 export const RouletteViewHook: React.FC = () => {
   const wheelAreaRef = useRef<HTMLDivElement>(null);
   const wheelSize = useWheelSize(wheelAreaRef);
@@ -273,6 +175,11 @@ export const RouletteViewHook: React.FC = () => {
   const spinAgainRef = useRef(false);
   // Premio de la casilla "Inténtalo de nuevo" que se está mostrando (o null).
   const [spinAgainNotice, setSpinAgainNotice] = useState<string | null>(null);
+  // Snapshot del premio ganador (modo de texto) para no depender de buscar por
+  // nombre (evita fallos con nombres repetidos como las 2 casillas "Inténtalo").
+  const winnerSnapshotRef = useRef<{
+    labelMode: "wheel" | "win" | "both";
+  } | null>(null);
 
   // Lee el token del fragmento, lo borra de la barra de direcciones y lo
   // valida contra el servidor sin consumir el ticket.
@@ -364,10 +271,23 @@ export const RouletteViewHook: React.FC = () => {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
-  const controlsRef = useRef<RouletteControls | null>(null);
-  const handleControlsReady = useCallback((controls: RouletteControls) => {
+  const controlsRef = useRef<RouletteWheelControls | null>(null);
+  const handleControlsReady = useCallback((controls: RouletteWheelControls) => {
     controlsRef.current = controls;
   }, []);
+
+  // Calibración PNG guardada en el servidor (la usa el wheel en reposo y en
+  // cada giro; el panel debug la guarda con PUT /api/wheel/calibration).
+  const [wheelCalibration, setWheelCalibration] = useState<{
+    alignmentOffset: number;
+    initialAngle: number;
+  } | null>(null);
+  const handleCalibrationSaved = useCallback(
+    (calibration: { alignmentOffset: number; initialAngle: number }) => {
+      setWheelCalibration(calibration);
+    },
+    [],
+  );
 
   // Carga configuración de premios (plantilla activa)
   useEffect(() => {
@@ -385,6 +305,7 @@ export const RouletteViewHook: React.FC = () => {
             imageUrl?: string | null;
             labelMode?: "wheel" | "win" | "both";
             isSpinAgain?: boolean;
+            sectorIndex?: number | null;
           }[]
         ).map((p) => ({
           name: p.name,
@@ -393,8 +314,24 @@ export const RouletteViewHook: React.FC = () => {
           image: p.imageUrl ?? null,
           labelMode: p.labelMode ?? "both",
           isSpinAgain: p.isSpinAgain === true,
+          sectorIndex: p.sectorIndex ?? null,
         }));
-        setRouletteItems(formattedPrizes);
+        setRouletteItems(sortBySector(formattedPrizes));
+
+        const rawCalibration = data?.calibration as
+          | { alignmentOffset?: unknown; initialAngle?: unknown }
+          | undefined;
+        if (
+          rawCalibration &&
+          typeof rawCalibration === "object" &&
+          Number.isFinite(Number(rawCalibration.alignmentOffset)) &&
+          Number.isFinite(Number(rawCalibration.initialAngle))
+        ) {
+          setWheelCalibration({
+            alignmentOffset: Number(rawCalibration.alignmentOffset),
+            initialAngle: Number(rawCalibration.initialAngle),
+          });
+        }
       } catch (error) {
         console.error("Failed to fetch prizes", error);
       }
@@ -407,6 +344,13 @@ export const RouletteViewHook: React.FC = () => {
 
   const handleSpin = async () => {
     if (isSpinning || isModalOpen || !rouletteItems) return;
+
+    if (!sectorsReady) {
+      setError(
+        "La ruleta no tiene los 6 sectores configurados. Avisa al operador.",
+      );
+      return;
+    }
 
     // Modo admin: puede girar sin ticket y sin límite de hasSpun
     const isAdminMode = ticketState.kind === "admin";
@@ -468,8 +412,9 @@ export const RouletteViewHook: React.FC = () => {
         image: p.imageUrl ?? null,
         labelMode: p.labelMode ?? "both",
         isSpinAgain: p.isSpinAgain === true,
+        sectorIndex: p.sectorIndex ?? null,
       }));
-      setRouletteItems(formattedPrizes);
+      setRouletteItems(sortBySector(formattedPrizes));
 
       if (!spinData.demo) {
         // Si cayó en "Inténtalo de nuevo", el ticket NO se consume.
@@ -483,13 +428,18 @@ export const RouletteViewHook: React.FC = () => {
       }
 
       const winningPrize = spinData.prizes[spinData.prizeIndex];
+      winnerSnapshotRef.current = winningPrize
+        ? { labelMode: winningPrize.labelMode ?? "both" }
+        : null;
       setWinnerColor(winningPrize?.backgroundColor ?? null);
       setWinnerImage(
         winningPrize?.imageUrl ?? spinData.prizeImageUrl ?? null,
       );
       setWinnerLabelMode(winningPrize?.labelMode ?? "both");
 
-      controlsRef.current?.start(spinData.prizeIndex);
+      // `prizeSector` es el índice de sector (0-5) que usará el motor como
+      // objetivo; si el backend no lo envía, se usa prizeIndex como respaldo.
+      controlsRef.current?.start(spinData.prizeSector ?? spinData.prizeIndex);
     } catch (err) {
       console.error("Spin failed:", err);
       spinAgainRef.current = false;
@@ -522,7 +472,13 @@ export const RouletteViewHook: React.FC = () => {
       (current) =>
         current ?? winningItem?.image ?? null,
     );
-    setWinnerLabelMode(winningItem?.labelMode ?? "both");
+    // El modo de texto viene del snapshot del giro (evita errores con nombres
+    // repetidos); el respaldo por nombre es solo para compatibilidad.
+    setWinnerLabelMode(
+      winnerSnapshotRef.current?.labelMode ??
+        winningItem?.labelMode ??
+        "both",
+    );
     soundManager.playWin();
   };
 
@@ -533,7 +489,10 @@ export const RouletteViewHook: React.FC = () => {
 
   const hasWinnerName = Boolean(finalResult && finalResult.trim().length > 0);
 
-  const canSpin = (ticketState.kind === "valid" && !hasSpun) || ticketState.kind === "admin";
+  // La ruleta PNG exige los 6 sectores completos para poder girar.
+  const sectorsReady = hasAllSectors(rouletteItems);
+
+  const canSpin = ((ticketState.kind === "valid" && !hasSpun) || ticketState.kind === "admin") && sectorsReady;
 
   return (
     <div
@@ -625,13 +584,15 @@ export const RouletteViewHook: React.FC = () => {
             className="relative z-10 w-full flex-1 min-h-0 flex items-center justify-center px-2"
           >
             {rouletteItems ? (
-              <RouletteGame
+              <RouletteWheel
                 items={rouletteItems}
                 onPrizeWon={handlePrizeWon}
                 onSpinStart={handleSpinStart}
                 onSpinEnd={handleSpinEnd}
                 size={wheelSize}
                 onControlsReady={handleControlsReady}
+                calibration={wheelCalibration ?? undefined}
+                onCalibrationSaved={handleCalibrationSaved}
               />
             ) : (
               <div className="aspect-square flex flex-col items-center justify-center gap-3">
@@ -717,6 +678,21 @@ export const RouletteViewHook: React.FC = () => {
                 }}
               >
                 {error}
+              </div>
+            )}
+
+            {/* Aviso si la plantilla activa no tiene los 6 sectores */}
+            {rouletteItems && !sectorsReady && (
+              <div
+                className="w-[90%] max-w-[340px] text-center text-sm px-3 py-2 rounded-xl"
+                style={{
+                  backgroundColor: "#fffbeb",
+                  color: "#b45309",
+                  border: "1px solid #fde68a",
+                }}
+              >
+                La ruleta no tiene los 6 sectores configurados. Avisa al
+                operador.
               </div>
             )}
 

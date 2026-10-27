@@ -7,6 +7,8 @@ import {
   getDb,
   getPrizeImage,
   getRouletteWithPrizes,
+  getWheelCalibration,
+  saveWheelCalibration,
   setActiveRoulette,
   type Prize,
   type LabelMode,
@@ -28,6 +30,13 @@ import {
 } from "./tickets/repository";
 import { withEffectiveStatus, effectiveStatus } from "./tickets/types";
 import { buildBatchQrZip, getBatchDetail } from "./tickets/service";
+import {
+  WHEEL_SECTOR_COUNT,
+  hasCompleteSectorMapping,
+  isValidSectorIndex,
+  sanitizeCalibration,
+  CalibrationValidationError,
+} from "./wheel";
 
 const router = Router();
 
@@ -44,16 +53,36 @@ class ValidationError extends Error {}
  * Normaliza y valida los premios recibidos. Evita guardar HTML/URLs
  * arbitrarias en la columna de imagen y limita su tamaño.
  */
-function sanitizePrizes(raw: unknown): Prize[] {
+export function sanitizePrizes(raw: unknown): Prize[] {
   if (!Array.isArray(raw)) {
     throw new ValidationError("La lista de premios no es válida.");
   }
 
+  if (raw.length !== WHEEL_SECTOR_COUNT) {
+    throw new ValidationError(
+      `La ruleta debe tener exactamente ${WHEEL_SECTOR_COUNT} premios, uno por sector.`,
+    );
+  }
+
   const validLabelModes: LabelMode[] = ["wheel", "win", "both"];
+  const usedSectors = new Set<number>();
 
   return raw.map((item, index) => {
     const candidate = (item ?? {}) as Partial<Prize>;
     const position = index + 1;
+
+    const sectorIndex = candidate.sectorIndex;
+    if (!isValidSectorIndex(sectorIndex)) {
+      throw new ValidationError(
+        `El premio ${position} necesita un sector válido (0 a ${WHEEL_SECTOR_COUNT - 1}).`,
+      );
+    }
+    if (usedSectors.has(sectorIndex)) {
+      throw new ValidationError(
+        `El sector ${sectorIndex + 1} está asignado a más de un premio.`,
+      );
+    }
+    usedSectors.add(sectorIndex);
 
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
     const hasImage = candidate.image != null && candidate.image !== "";
@@ -115,6 +144,7 @@ function sanitizePrizes(raw: unknown): Prize[] {
       image,
       labelMode,
       isSpinAgain,
+      sectorIndex,
     };
   });
 }
@@ -129,6 +159,7 @@ function toPublicPrize(prize: Prize) {
     imageUrl: prize.imageUrl ?? null,
     labelMode: prize.labelMode ?? "both",
     isSpinAgain: prize.isSpinAgain === true,
+    sectorIndex: prize.sectorIndex ?? null,
   };
 }
 
@@ -465,10 +496,15 @@ router.post("/spin", async (req, res) => {
     const token = typeof body.token === "string" ? body.token.trim() : "";
 
     const active = await getActiveRouletteWithPrizes();
-    if (!active || !active.prizes || active.prizes.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No hay plantilla activa con premios." });
+    if (
+      !active ||
+      !active.prizes ||
+      !hasCompleteSectorMapping(active.prizes)
+    ) {
+      return res.status(409).json({
+        message:
+          "La ruleta activa no tiene los 6 sectores configurados. Avisa al operador.",
+      });
     }
 
     // MODO DEMO: sin token pero con sesión de operador
@@ -490,6 +526,7 @@ router.post("/spin", async (req, res) => {
         demo: true,
         spinAgain: prize.isSpinAgain === true,
         prizeIndex: winnerIndex,
+        prizeSector: prize.sectorIndex ?? winnerIndex,
         prize: prize.name,
         prizeImageUrl: prize.imageUrl ?? null,
         prizes: active.prizes.map(toPublicPrize),
@@ -541,6 +578,7 @@ router.post("/spin", async (req, res) => {
       return res.json({
         spinAgain: true,
         prizeIndex: winnerIndex,
+        prizeSector: prize.sectorIndex ?? winnerIndex,
         prize: prize.name,
         prizeImageUrl: prize.imageUrl ?? null,
         prizes: active.prizes.map(toPublicPrize),
@@ -569,6 +607,7 @@ router.post("/spin", async (req, res) => {
       claimCode: redeemResult.ticket.id.slice(0, 8).toUpperCase(),
       ticketId: redeemResult.ticket.id,
       prizeIndex: winnerIndex,
+      prizeSector: prize.sectorIndex ?? winnerIndex,
       prize: prize.name,
       prizeImageUrl: prize.imageUrl ?? null,
       prizes: active.prizes.map(toPublicPrize),
@@ -588,15 +627,59 @@ router.post("/spin", async (req, res) => {
 router.get("/configuracion", async (req, res) => {
   try {
     const activeRoulette = await getActiveRouletteWithPrizes();
-    if (!activeRoulette) {
-      return res
-        .status(404)
-        .json({ message: "No active roulette configuration found." });
+    if (
+      !activeRoulette ||
+      !activeRoulette.prizes ||
+      !hasCompleteSectorMapping(activeRoulette.prizes)
+    ) {
+      return res.status(409).json({
+        message:
+          "La ruleta activa no tiene los 6 sectores configurados. Avisa al operador.",
+      });
     }
-    res.json({ prizes: (activeRoulette.prizes ?? []).map(toPublicPrize) });
+    const calibration = await getWheelCalibration();
+    res.json({
+      prizes: activeRoulette.prizes.map(toPublicPrize),
+      sectorCount: WHEEL_SECTOR_COUNT,
+      calibration,
+    });
   } catch (error) {
     console.error("Configuracion error:", error);
     res.status(500).json({ message: "Failed to fetch active configuration." });
+  }
+});
+
+/**
+ * GET /api/wheel/calibration
+ * Devuelve la calibración PNG guardada (solo operador).
+ */
+router.get("/wheel/calibration", requireOperator, async (_req, res) => {
+  try {
+    res.json(await getWheelCalibration());
+  } catch (error) {
+    console.error("Get calibration error:", error);
+    res.status(500).json({ message: "No se pudo leer la calibración." });
+  }
+});
+
+/**
+ * PUT /api/wheel/calibration
+ * Guarda la calibración PNG de la ruleta (solo operador).
+ */
+router.put("/wheel/calibration", requireOperator, async (req, res) => {
+  try {
+    const calibration = sanitizeCalibration(req.body);
+    const saved = await saveWheelCalibration(
+      calibration.alignmentOffset,
+      calibration.initialAngle,
+    );
+    res.json(saved);
+  } catch (error) {
+    if (error instanceof CalibrationValidationError) {
+      return res.status(400).json({ message: error.message });
+    }
+    console.error("Save calibration error:", error);
+    res.status(500).json({ message: "No se pudo guardar la calibración." });
   }
 });
 
@@ -646,7 +729,12 @@ router.get("/roulettes/:id", requireOperator, async (req, res) => {
 router.post("/roulettes", requireOperator, async (req, res) => {
   try {
     const { name, prizes } = req.body as { name: string; prizes: unknown };
-    const newRoulette = await createRoulette(name, sanitizePrizes(prizes));
+    // Las plantillas nuevas se crean con los 6 sectores base; el panel envía [].
+    const sanitizedPrizes =
+      Array.isArray(prizes) && prizes.length === 0
+        ? []
+        : sanitizePrizes(prizes);
+    const newRoulette = await createRoulette(name, sanitizedPrizes);
     return res.status(201).json(newRoulette);
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -687,8 +775,16 @@ router.delete("/roulettes/:id", requireOperator, async (req, res) => {
 });
 
 router.post("/roulettes/active/:id", requireOperator, async (req, res) => {
-  await setActiveRoulette(Number(req.params.id));
-  res.status(200).json({ message: "Active roulette updated." });
+  try {
+    await setActiveRoulette(Number(req.params.id));
+    res.status(200).json({ message: "Active roulette updated." });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "No se pudo activar la plantilla.";
+    res.status(400).json({ message });
+  }
 });
 
 // Health check endpoint
