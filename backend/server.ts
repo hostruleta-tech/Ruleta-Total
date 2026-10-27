@@ -20,6 +20,6 @@ app.use("/api-ruleta", router);
 
 app.listen(port, () => {
   console.log(
-    `Ruleta TOTAL backend server listening on http://localhost:${port}
+    `Ruleta TOTAL backend server listening on http://localhost:${port}`,
   );
 });
