@@ -8,6 +8,9 @@ import { Maximize, Minimize, LayoutDashboard, Bell } from "lucide-react";
 import type { RouletteItem } from "@/features/motor/types";
 import { RouletteWheel, type RouletteWheelControls, type WheelCalibration } from "./roulette-wheel";
 import {
+  WHEEL_CENTER_OFFSET_X_PX,
+  WHEEL_CENTER_OFFSET_Y_PX,
+  WHEEL_CENTER_SCALE,
   WHEEL_DISK_OFFSET_X_PX,
   WHEEL_DISK_OFFSET_Y_PX,
   WHEEL_DISK_ROTATION,
@@ -329,6 +332,9 @@ export const RouletteViewHook: React.FC = () => {
               diskOffsetY?: unknown;
               diskScale?: unknown;
               diskRotation?: unknown;
+              centerOffsetX?: unknown;
+              centerOffsetY?: unknown;
+              centerScale?: unknown;
             }
           | undefined;
         if (
@@ -356,6 +362,18 @@ export const RouletteViewHook: React.FC = () => {
             diskRotation: finiteOr(
               rawCalibration.diskRotation,
               WHEEL_DISK_ROTATION,
+            ),
+            centerOffsetX: finiteOr(
+              rawCalibration.centerOffsetX,
+              WHEEL_CENTER_OFFSET_X_PX,
+            ),
+            centerOffsetY: finiteOr(
+              rawCalibration.centerOffsetY,
+              WHEEL_CENTER_OFFSET_Y_PX,
+            ),
+            centerScale: finiteOr(
+              rawCalibration.centerScale,
+              WHEEL_CENTER_SCALE,
             ),
           });
         }

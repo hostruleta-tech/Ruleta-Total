@@ -69,6 +69,15 @@ export const WHEEL_DISK_OFFSET_Y_PX = 16;
 export const WHEEL_DISK_SCALE = 1;
 export const WHEEL_DISK_ROTATION = 0;
 
+/**
+ * Desplazamiento y escala EXTRA del centro PNG respecto al bloque (disco +
+ * centro). Son independientes del bloque: mueven y agrandan/encogen SOLO el
+ * centro, útil para que cuadre con la maza del disco en calibración.
+ */
+export const WHEEL_CENTER_OFFSET_X_PX = 0;
+export const WHEEL_CENTER_OFFSET_Y_PX = 0;
+export const WHEEL_CENTER_SCALE = 1;
+
 /** Rango de calibración para el desplazamiento del bloque PNG (px). */
 export const WHEEL_DISK_OFFSET_MIN = -200;
 export const WHEEL_DISK_OFFSET_MAX = 200;
@@ -80,6 +89,14 @@ export const WHEEL_DISK_SCALE_MAX = 1.5;
 /** Rango de calibración para la rotación extra del bloque PNG (grados). */
 export const WHEEL_DISK_ROTATION_MIN = -180;
 export const WHEEL_DISK_ROTATION_MAX = 180;
+
+/** Rango de calibración para el desplazamiento del centro PNG (px). */
+export const WHEEL_CENTER_OFFSET_MIN = -200;
+export const WHEEL_CENTER_OFFSET_MAX = 200;
+
+/** Rango de calibración para la escala del centro PNG (1 = tamaño natural). */
+export const WHEEL_CENTER_SCALE_MIN = 0.5;
+export const WHEEL_CENTER_SCALE_MAX = 1.5;
 
 /**
  * Ajuste (en grados) de la capa PNG respecto a la geometría del motor.

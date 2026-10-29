@@ -86,6 +86,9 @@ describe("sanitizeCalibration", () => {
 				diskOffsetY: 20,
 				diskScale: 1.1,
 				diskRotation: -45,
+				centerOffsetX: 8,
+				centerOffsetY: -3,
+				centerScale: 1.2,
 			}),
 		).toEqual({
 			alignmentOffset: 2.5,
@@ -94,6 +97,9 @@ describe("sanitizeCalibration", () => {
 			diskOffsetY: 20,
 			diskScale: 1.1,
 			diskRotation: -45,
+			centerOffsetX: 8,
+			centerOffsetY: -3,
+			centerScale: 1.2,
 		});
 		expect(
 			sanitizeCalibration({ alignmentOffset: 0, initialAngle: 75 }),
@@ -104,6 +110,9 @@ describe("sanitizeCalibration", () => {
 			diskOffsetY: 16,
 			diskScale: 1,
 			diskRotation: 0,
+			centerOffsetX: 0,
+			centerOffsetY: 0,
+			centerScale: 1,
 		});
 		expect(
 			sanitizeCalibration({ alignmentOffset: -180, initialAngle: 360 }),
@@ -114,6 +123,9 @@ describe("sanitizeCalibration", () => {
 			diskOffsetY: 16,
 			diskScale: 1,
 			diskRotation: 0,
+			centerOffsetX: 0,
+			centerOffsetY: 0,
+			centerScale: 1,
 		});
 	});
 
@@ -168,6 +180,40 @@ describe("sanitizeCalibration", () => {
 				alignmentOffset: 0,
 				initialAngle: 75,
 				diskScale: 1.51,
+			}),
+		).toThrow(CalibrationValidationError);
+	});
+
+	it("rechaza desplazamiento del centro fuera de rango", () => {
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				centerOffsetX: -201,
+			}),
+		).toThrow(CalibrationValidationError);
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				centerOffsetY: 201,
+			}),
+		).toThrow(CalibrationValidationError);
+	});
+
+	it("rechaza escala del centro fuera de rango", () => {
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				centerScale: 0.49,
+			}),
+		).toThrow(CalibrationValidationError);
+		expect(() =>
+			sanitizeCalibration({
+				alignmentOffset: 0,
+				initialAngle: 75,
+				centerScale: 1.51,
 			}),
 		).toThrow(CalibrationValidationError);
 	});

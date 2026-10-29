@@ -64,6 +64,27 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_tickets_status_redeemed ON tickets (status, redeemed_at)`,
     ],
   },
+  {
+    id: "005_wheel_center_offsets",
+    statements: [
+      // La tabla base normalmente la crea ensureInitialized, pero en la BD
+      // de tests no; crearla aquí (sin las columnas nuevas) hace la
+      // migración autónoma e idempotente para ambos casos.
+      `CREATE TABLE IF NOT EXISTS wheel_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        alignment_offset REAL NOT NULL DEFAULT 0,
+        initial_angle REAL NOT NULL DEFAULT 75,
+        disk_offset_x REAL NOT NULL DEFAULT 0,
+        disk_offset_y REAL NOT NULL DEFAULT 16,
+        disk_scale REAL NOT NULL DEFAULT 1,
+        disk_rotation REAL NOT NULL DEFAULT 0,
+        updated_at TEXT
+      )`,
+      `ALTER TABLE wheel_settings ADD COLUMN center_offset_x REAL NOT NULL DEFAULT 0`,
+      `ALTER TABLE wheel_settings ADD COLUMN center_offset_y REAL NOT NULL DEFAULT 0`,
+      `ALTER TABLE wheel_settings ADD COLUMN center_scale REAL NOT NULL DEFAULT 1`,
+    ],
+  },
 ];
 
 /**

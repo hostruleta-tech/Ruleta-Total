@@ -10,6 +10,9 @@ import {
 	WHEEL_DEFAULT_DISK_OFFSET_Y,
 	WHEEL_DEFAULT_DISK_SCALE,
 	WHEEL_DEFAULT_DISK_ROTATION,
+	WHEEL_DEFAULT_CENTER_OFFSET_X,
+	WHEEL_DEFAULT_CENTER_OFFSET_Y,
+	WHEEL_DEFAULT_CENTER_SCALE,
 	isValidSectorIndex,
 	type WheelCalibration,
 } from "./wheel";
@@ -571,7 +574,7 @@ export async function getPrizeImage(id: number): Promise<string | null> {
 export async function getWheelCalibration(): Promise<WheelCalibration> {
 	const db = await getDb();
 	const result = await db.execute({
-		sql: "SELECT alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation FROM wheel_settings WHERE id = 1",
+		sql: "SELECT alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, center_offset_x, center_offset_y, center_scale FROM wheel_settings WHERE id = 1",
 		args: [],
 	});
 
@@ -599,6 +602,18 @@ export async function getWheelCalibration(): Promise<WheelCalibration> {
 			row == null || row.disk_rotation == null
 				? WHEEL_DEFAULT_DISK_ROTATION
 				: Number(row.disk_rotation),
+		centerOffsetX:
+			row == null || row.center_offset_x == null
+				? WHEEL_DEFAULT_CENTER_OFFSET_X
+				: Number(row.center_offset_x),
+		centerOffsetY:
+			row == null || row.center_offset_y == null
+				? WHEEL_DEFAULT_CENTER_OFFSET_Y
+				: Number(row.center_offset_y),
+		centerScale:
+			row == null || row.center_scale == null
+				? WHEEL_DEFAULT_CENTER_SCALE
+				: Number(row.center_scale),
 	};
 }
 
@@ -608,8 +623,8 @@ export async function saveWheelCalibration(
 ): Promise<WheelCalibration> {
 	const db = await getDb();
 	await db.execute({
-		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, center_offset_x, center_offset_y, center_scale, updated_at)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   alignment_offset = excluded.alignment_offset,
                   initial_angle = excluded.initial_angle,
@@ -617,6 +632,9 @@ export async function saveWheelCalibration(
                   disk_offset_y = excluded.disk_offset_y,
                   disk_scale = excluded.disk_scale,
                   disk_rotation = excluded.disk_rotation,
+                  center_offset_x = excluded.center_offset_x,
+                  center_offset_y = excluded.center_offset_y,
+                  center_scale = excluded.center_scale,
                   updated_at = excluded.updated_at`,
 		args: [
 			calibration.alignmentOffset,
@@ -625,6 +643,9 @@ export async function saveWheelCalibration(
 			calibration.diskOffsetY,
 			calibration.diskScale,
 			calibration.diskRotation,
+			calibration.centerOffsetX,
+			calibration.centerOffsetY,
+			calibration.centerScale,
 			new Date().toISOString(),
 		],
 	});

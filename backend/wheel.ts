@@ -51,6 +51,10 @@ export function hasCompleteSectorMapping(
  *   centro) respecto a su caja, en px CSS.
  * - `diskScale`: escala del bloque PNG (1 = tamaño natural).
  * - `diskRotation`: rotación extra del bloque PNG (grados).
+ * - `centerOffsetX` / `centerOffsetY`: desplazamiento EXTRA del centro PNG
+ *   respecto al bloque (disco + centro), en px CSS. Mueven solo el centro.
+ * - `centerScale`: escala EXTRA del centro PNG (1 = tamaño natural). Solo
+ *   agranda/encoge el centro, no el disco.
  */
 export interface WheelCalibration {
 	alignmentOffset: number;
@@ -59,6 +63,9 @@ export interface WheelCalibration {
 	diskOffsetY: number;
 	diskScale: number;
 	diskRotation: number;
+	centerOffsetX: number;
+	centerOffsetY: number;
+	centerScale: number;
 }
 
 /** Valores por defecto de la calibración (mismos que en wheel-design.ts). */
@@ -68,6 +75,9 @@ export const WHEEL_DEFAULT_DISK_OFFSET_X = 0;
 export const WHEEL_DEFAULT_DISK_OFFSET_Y = 16;
 export const WHEEL_DEFAULT_DISK_SCALE = 1;
 export const WHEEL_DEFAULT_DISK_ROTATION = 0;
+export const WHEEL_DEFAULT_CENTER_OFFSET_X = 0;
+export const WHEEL_DEFAULT_CENTER_OFFSET_Y = 0;
+export const WHEEL_DEFAULT_CENTER_SCALE = 1;
 
 /** Rango válido para `alignmentOffset` (grados). */
 export const WHEEL_ALIGNMENT_OFFSET_MIN = -180;
@@ -89,6 +99,14 @@ export const WHEEL_DISK_SCALE_MAX = 1.5;
 export const WHEEL_DISK_ROTATION_MIN = -180;
 export const WHEEL_DISK_ROTATION_MAX = 180;
 
+/** Rango válido para el desplazamiento extra del centro PNG (px). */
+export const WHEEL_CENTER_OFFSET_MIN = -200;
+export const WHEEL_CENTER_OFFSET_MAX = 200;
+
+/** Rango válido para la escala extra del centro PNG. */
+export const WHEEL_CENTER_SCALE_MIN = 0.5;
+export const WHEEL_CENTER_SCALE_MAX = 1.5;
+
 /** Error de validación de calibración. */
 export class CalibrationValidationError extends Error {}
 
@@ -109,6 +127,9 @@ export function sanitizeCalibration(
 		diskOffsetY?: unknown;
 		diskScale?: unknown;
 		diskRotation?: unknown;
+		centerOffsetX?: unknown;
+		centerOffsetY?: unknown;
+		centerScale?: unknown;
 	};
 
 	const alignmentOffset = Number(candidate.alignmentOffset);
@@ -128,6 +149,18 @@ export function sanitizeCalibration(
 	const diskRotation = readOptionalNumber(
 		candidate.diskRotation,
 		WHEEL_DEFAULT_DISK_ROTATION,
+	);
+	const centerOffsetX = readOptionalNumber(
+		candidate.centerOffsetX,
+		WHEEL_DEFAULT_CENTER_OFFSET_X,
+	);
+	const centerOffsetY = readOptionalNumber(
+		candidate.centerOffsetY,
+		WHEEL_DEFAULT_CENTER_OFFSET_Y,
+	);
+	const centerScale = readOptionalNumber(
+		candidate.centerScale,
+		WHEEL_DEFAULT_CENTER_SCALE,
 	);
 
 	if (
@@ -190,6 +223,36 @@ export function sanitizeCalibration(
 		);
 	}
 
+	if (
+		!Number.isFinite(centerOffsetX) ||
+		centerOffsetX < WHEEL_CENTER_OFFSET_MIN ||
+		centerOffsetX > WHEEL_CENTER_OFFSET_MAX
+	) {
+		throw new CalibrationValidationError(
+			`centerOffsetX debe estar entre ${WHEEL_CENTER_OFFSET_MIN} y ${WHEEL_CENTER_OFFSET_MAX}.`,
+		);
+	}
+
+	if (
+		!Number.isFinite(centerOffsetY) ||
+		centerOffsetY < WHEEL_CENTER_OFFSET_MIN ||
+		centerOffsetY > WHEEL_CENTER_OFFSET_MAX
+	) {
+		throw new CalibrationValidationError(
+			`centerOffsetY debe estar entre ${WHEEL_CENTER_OFFSET_MIN} y ${WHEEL_CENTER_OFFSET_MAX}.`,
+		);
+	}
+
+	if (
+		!Number.isFinite(centerScale) ||
+		centerScale < WHEEL_CENTER_SCALE_MIN ||
+		centerScale > WHEEL_CENTER_SCALE_MAX
+	) {
+		throw new CalibrationValidationError(
+			`centerScale debe estar entre ${WHEEL_CENTER_SCALE_MIN} y ${WHEEL_CENTER_SCALE_MAX}.`,
+		);
+	}
+
 	return {
 		alignmentOffset,
 		initialAngle,
@@ -197,5 +260,8 @@ export function sanitizeCalibration(
 		diskOffsetY,
 		diskScale,
 		diskRotation,
+		centerOffsetX,
+		centerOffsetY,
+		centerScale,
 	};
 }

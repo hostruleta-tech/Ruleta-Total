@@ -10,6 +10,13 @@ import {
 	WHEEL_ALIGNMENT_OFFSET,
 	WHEEL_ALIGNMENT_OFFSET_MAX,
 	WHEEL_ALIGNMENT_OFFSET_MIN,
+	WHEEL_CENTER_OFFSET_MAX,
+	WHEEL_CENTER_OFFSET_MIN,
+	WHEEL_CENTER_OFFSET_X_PX,
+	WHEEL_CENTER_OFFSET_Y_PX,
+	WHEEL_CENTER_SCALE,
+	WHEEL_CENTER_SCALE_MAX,
+	WHEEL_CENTER_SCALE_MIN,
 	WHEEL_DETERMINE_ANGLE,
 	WHEEL_DISK_OFFSET_MAX,
 	WHEEL_DISK_OFFSET_MIN,
@@ -176,6 +183,9 @@ export interface WheelCalibration {
 	diskOffsetY: number;
 	diskScale: number;
 	diskRotation: number;
+	centerOffsetX: number;
+	centerOffsetY: number;
+	centerScale: number;
 }
 
 /** Ajustes de visualización SOLO de calibración (opacidad y canvas). */
@@ -303,6 +313,9 @@ const CalibrationPanel: React.FC<{
 	diskOffsetY: number;
 	diskScale: number;
 	diskRotation: number;
+	centerOffsetX: number;
+	centerOffsetY: number;
+	centerScale: number;
 	saveState: SaveState;
 	onChangeView: (patch: Partial<ViewSettings>) => void;
 	onChangeAlignment: (alignmentOffset: number) => void;
@@ -312,6 +325,14 @@ const CalibrationPanel: React.FC<{
 			Pick<
 				WheelCalibration,
 				"diskOffsetX" | "diskOffsetY" | "diskScale" | "diskRotation"
+			>
+		>,
+	) => void;
+	onChangeCenter: (
+		patch: Partial<
+			Pick<
+				WheelCalibration,
+				"centerOffsetX" | "centerOffsetY" | "centerScale"
 			>
 		>,
 	) => void;
@@ -325,11 +346,15 @@ const CalibrationPanel: React.FC<{
 	diskOffsetY,
 	diskScale,
 	diskRotation,
+	centerOffsetX,
+	centerOffsetY,
+	centerScale,
 	saveState,
 	onChangeView,
 	onChangeAlignment,
 	onChangePose,
 	onChangeGeometry,
+	onChangeCenter,
 	onSave,
 	onReset,
 }) => {
@@ -356,6 +381,22 @@ const CalibrationPanel: React.FC<{
 		});
 	};
 
+	/** Mueve SOLO el centro PNG; con Shift el paso es de 10 px. */
+	const nudgeCenter = (dx: number, dy: number, step = 1) => {
+		onChangeCenter({
+			centerOffsetX: clampNumber(
+				centerOffsetX + dx * step,
+				WHEEL_CENTER_OFFSET_MIN,
+				WHEEL_CENTER_OFFSET_MAX,
+			),
+			centerOffsetY: clampNumber(
+				centerOffsetY + dy * step,
+				WHEEL_CENTER_OFFSET_MIN,
+				WHEEL_CENTER_OFFSET_MAX,
+			),
+		});
+	};
+
 	const handleCopy = async () => {
 		const snippet = [
 			`export const WHEEL_ALIGNMENT_OFFSET = ${alignmentOffset};`,
@@ -364,6 +405,9 @@ const CalibrationPanel: React.FC<{
 			`export const WHEEL_DISK_OFFSET_Y_PX = ${diskOffsetY};`,
 			`export const WHEEL_DISK_SCALE = ${diskScale};`,
 			`export const WHEEL_DISK_ROTATION = ${diskRotation};`,
+			`export const WHEEL_CENTER_OFFSET_X_PX = ${centerOffsetX};`,
+			`export const WHEEL_CENTER_OFFSET_Y_PX = ${centerOffsetY};`,
+			`export const WHEEL_CENTER_SCALE = ${centerScale};`,
 		].join("\n");
 		try {
 			if (navigator.clipboard) {
@@ -567,6 +611,106 @@ const CalibrationPanel: React.FC<{
 				/>
 			</fieldset>
 
+			<fieldset className="mt-3 rounded-lg border border-white/15 p-2">
+				<legend className="px-1 text-[10px] font-bold uppercase tracking-wide text-cyan-300/80">
+					Centro (independiente)
+				</legend>
+
+				{/* Flechas de movimiento del centro (Shift = paso de 10 px) */}
+				<div className="mx-auto mb-2 grid w-[86px] grid-cols-3 grid-rows-2 gap-1">
+					<button
+						type="button"
+						title="Mover centro arriba (Shift = 10 px)"
+						onClick={(event) =>
+							nudgeCenter(0, -1, event.shiftKey ? 10 : 1)
+						}
+						className="col-start-2 row-start-1 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						↑
+					</button>
+					<button
+						type="button"
+						title="Mover centro a la izquierda (Shift = 10 px)"
+						onClick={(event) =>
+							nudgeCenter(-1, 0, event.shiftKey ? 10 : 1)
+						}
+						className="col-start-1 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						←
+					</button>
+					<button
+						type="button"
+						title="Mover centro abajo (Shift = 10 px)"
+						onClick={(event) =>
+							nudgeCenter(0, 1, event.shiftKey ? 10 : 1)
+						}
+						className="col-start-2 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						↓
+					</button>
+					<button
+						type="button"
+						title="Mover centro a la derecha (Shift = 10 px)"
+						onClick={(event) =>
+							nudgeCenter(1, 0, event.shiftKey ? 10 : 1)
+						}
+						className="col-start-3 row-start-2 rounded bg-white/10 py-0.5 font-bold leading-none hover:bg-white/20"
+					>
+						→
+					</button>
+				</div>
+
+				<label className="mb-1 flex items-center justify-between">
+					<span>Horizontal (X)</span>
+					<b>{Math.round(centerOffsetX)} px</b>
+				</label>
+				<input
+					type="range"
+					min={WHEEL_CENTER_OFFSET_MIN}
+					max={WHEEL_CENTER_OFFSET_MAX}
+					step={1}
+					value={centerOffsetX}
+					onChange={(event) =>
+						onChangeCenter({ centerOffsetX: Number(event.target.value) })
+					}
+					className="w-full accent-cyan-400"
+				/>
+
+				<label className="mt-2 mb-1 flex items-center justify-between">
+					<span>Vertical (Y)</span>
+					<b>{Math.round(centerOffsetY)} px</b>
+				</label>
+				<input
+					type="range"
+					min={WHEEL_CENTER_OFFSET_MIN}
+					max={WHEEL_CENTER_OFFSET_MAX}
+					step={1}
+					value={centerOffsetY}
+					onChange={(event) =>
+						onChangeCenter({ centerOffsetY: Number(event.target.value) })
+					}
+					className="w-full accent-cyan-400"
+				/>
+
+				<label className="mt-2 mb-1 flex items-center justify-between">
+					<span>Escala</span>
+					<b>{Math.round(centerScale * 100)}%</b>
+				</label>
+				<input
+					type="range"
+					min={Math.round(WHEEL_CENTER_SCALE_MIN * 100)}
+					max={Math.round(WHEEL_CENTER_SCALE_MAX * 100)}
+					step={1}
+					value={Math.round(centerScale * 100)}
+					onChange={(event) =>
+						onChangeCenter({
+							centerScale: Number(event.target.value) / 100,
+						})
+					}
+					className="w-full accent-cyan-400"
+				/>
+			</fieldset>
+
 			<div className="mt-3 flex gap-1.5">
 				<button
 					type="button"
@@ -638,6 +782,11 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	const serverDiskOffsetY = calibration?.diskOffsetY ?? WHEEL_DISK_OFFSET_Y_PX;
 	const serverDiskScale = calibration?.diskScale ?? WHEEL_DISK_SCALE;
 	const serverDiskRotation = calibration?.diskRotation ?? WHEEL_DISK_ROTATION;
+	const serverCenterOffsetX =
+		calibration?.centerOffsetX ?? WHEEL_CENTER_OFFSET_X_PX;
+	const serverCenterOffsetY =
+		calibration?.centerOffsetY ?? WHEEL_CENTER_OFFSET_Y_PX;
+	const serverCenterScale = calibration?.centerScale ?? WHEEL_CENTER_SCALE;
 	const [draft, setDraft] = useState<Partial<WheelCalibration> | null>(null);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
 
@@ -647,6 +796,9 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	const previewDiskOffsetY = readParamNumber("wheelY");
 	const previewDiskScale = readParamNumber("wheelScale");
 	const previewDiskRotation = readParamNumber("wheelRotation");
+	const previewCenterOffsetX = readParamNumber("wheelCenterX");
+	const previewCenterOffsetY = readParamNumber("wheelCenterY");
+	const previewCenterScale = readParamNumber("wheelCenterScale");
 
 	const alignmentOffset =
 		draft?.alignmentOffset ?? previewAlignment ?? serverAlignment;
@@ -658,6 +810,12 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	const diskScale = draft?.diskScale ?? previewDiskScale ?? serverDiskScale;
 	const diskRotation =
 		draft?.diskRotation ?? previewDiskRotation ?? serverDiskRotation;
+	const centerOffsetX =
+		draft?.centerOffsetX ?? previewCenterOffsetX ?? serverCenterOffsetX;
+	const centerOffsetY =
+		draft?.centerOffsetY ?? previewCenterOffsetY ?? serverCenterOffsetY;
+	const centerScale =
+		draft?.centerScale ?? previewCenterScale ?? serverCenterScale;
 
 	const handleChangeAlignment = useCallback((alignment: number) => {
 		setSaveState("idle");
@@ -681,6 +839,21 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 		[],
 	);
 
+	const handleChangeCenter = useCallback(
+		(
+			patch: Partial<
+				Pick<
+					WheelCalibration,
+					"centerOffsetX" | "centerOffsetY" | "centerScale"
+				>
+			>,
+		) => {
+			setSaveState("idle");
+			setDraft((previous) => ({ ...previous, ...patch }));
+		},
+		[],
+	);
+
 	const handleSaveCalibration = useCallback(async () => {
 		setSaveState("saving");
 		const next: WheelCalibration = {
@@ -690,6 +863,9 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 			diskOffsetY,
 			diskScale,
 			diskRotation,
+			centerOffsetX,
+			centerOffsetY,
+			centerScale,
 		};
 		try {
 			const response = await fetch(`${API_URL}/wheel/calibration`, {
@@ -711,6 +887,9 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 		diskOffsetY,
 		diskScale,
 		diskRotation,
+		centerOffsetX,
+		centerOffsetY,
+		centerScale,
 		onCalibrationSaved,
 	]);
 
@@ -824,17 +1003,20 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 					/>
 				)}
 
-				{/* Centro fijo (PNG aparte, NO gira). */}
+				{/* Centro fijo (PNG aparte, NO gira). Se mueve y escala SOLO con
+				    los controles del fieldset "Centro"; hereda el movimiento
+				    del bloque (disco + centro) pero no la rotación del disco. */}
 				{diskState === "ok" && (
 					<img
 						src={CENTER_IMAGE_URL}
 						alt=""
 						draggable={false}
-						className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain select-none"
+						className="pointer-events-none absolute left-1/2 top-1/2 object-contain select-none"
 						style={{
 							opacity: pngOpacity,
 							width: `${CENTER_SIZE_RATIO * 100}%`,
 							height: `${CENTER_SIZE_RATIO * 100}%`,
+							transform: `translate(calc(-50% + ${centerOffsetX}px), calc(-50% + ${centerOffsetY}px)) scale(${centerScale})`,
 						}}
 						aria-hidden="true"
 					/>
@@ -912,11 +1094,15 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 					diskOffsetY={diskOffsetY}
 					diskScale={diskScale}
 					diskRotation={diskRotation}
+					centerOffsetX={centerOffsetX}
+					centerOffsetY={centerOffsetY}
+					centerScale={centerScale}
 					saveState={saveState}
 					onChangeView={updateView}
 					onChangeAlignment={handleChangeAlignment}
 					onChangePose={handleChangePose}
 					onChangeGeometry={handleChangeGeometry}
+					onChangeCenter={handleChangeCenter}
 					onSave={handleSaveCalibration}
 					onReset={handleResetCalibration}
 				/>
