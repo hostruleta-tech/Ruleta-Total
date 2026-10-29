@@ -1,9 +1,9 @@
-# DEPLOYMENT.md — Ruleta TOTAL (Vercel + Turso)
+# DEPLOYMENT.md ï¿½ Ruleta TOTAL (Vercel + Turso)
 
 ## 1. Arquitectura
 
 - **Frontend + Backend:** Monorepo desplegado en **Vercel** (una sola app)
-- **Base de datos:** **Turso (libSQL)** - SQLite serverless, réplicas globales
+- **Base de datos:** **Turso (libSQL)** - SQLite serverless, rï¿½plicas globales
 - **DNS:** Dominio personalizado apuntando a Vercel
 
 ## 2. Requisitos previos
@@ -18,10 +18,10 @@
 # Crear la base de datos
 turso db create ruleta-prod
 
-# Obtener URL de conexión
+# Obtener URL de conexiï¿½n
 turso db show ruleta-prod --url
 
-# Crear token de autenticación
+# Crear token de autenticaciï¿½n
 turso db tokens create ruleta-prod
 ```
 
@@ -31,28 +31,28 @@ Guardar la **URL** (formato `libsql://...`) y el **token**.
 
 ### Frontend (configurar en Vercel Dashboard ? Settings ? Environment Variables)
 
-| Variable | Valor | Descripción |
+| Variable | Valor | Descripciï¿½n |
 |----------|-------|-------------|
-| `VITE_API_URL` | `/api` | En Vercel, el backend está en el mismo dominio |
+| `VITE_API_URL` | `/api` | En Vercel, el backend estï¿½ en el mismo dominio |
 | `VITE_BASE_PATH` | `/` | Cambiar si se despliega en subdirectorio |
 
 ### Backend (configurar en Vercel Dashboard ? Settings ? Environment Variables)
 
-| Variable | Valor | Descripción |
+| Variable | Valor | Descripciï¿½n |
 |----------|-------|-------------|
-| `DATABASE_URL` | `libsql://ruleta-prod-usuario.turso.io` | URL de Turso |
-| `DATABASE_AUTH_TOKEN` | `eyJ...` | Token de autenticación de Turso |
-| `OPERATOR_PASSWORD` | `contraseña_segura` | Password para panel de operador |
+| `TURSO_DATABASE_URL` (o `DATABASE_URL`) | `libsql://ruleta-prod-usuario.turso.io` | URL de Turso. El cï¿½digo acepta cualquiera de los dos nombres; define solo uno |
+| `TURSO_AUTH_TOKEN` | `eyJ...` | Token de autenticaciï¿½n de Turso |
+| `OPERATOR_PASSWORD` | `contraseï¿½a_segura` | Password para panel de operador |
 | `SESSION_SECRET` | `32_bytes_hex` | Generar: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `TICKET_ENCRYPTION_KEY` | `32_bytes_base64` | Generar: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
-| `PUBLIC_APP_URL` | `https://tudominio.com` | URL pública HTTPS para QR codes |
-| `NODE_ENV` | `production` | Forzado en producción |
+| `PUBLIC_APP_URL` | `https://tudominio.com` | OPCIONAL: solo para URLs absolutas de QR. Si falta, en Vercel se usa `VERCEL_PROJECT_PRODUCTION_URL` automï¿½ticamente |
+| `NODE_ENV` | `production` | Forzado en producciï¿½n |
 
 **?? IMPORTANTE:** Nunca subir archivos `.env` al repositorio. Todas las variables secretas se configuran en Vercel Dashboard.
 
 ## 5. Despliegue en Vercel
 
-### Opción A: Desde Vercel Dashboard (recomendado)
+### Opciï¿½n A: Desde Vercel Dashboard (recomendado)
 
 1. Ir a [Vercel Dashboard](https://vercel.com/dashboard)
 2. **Add New...** ? **Project**
@@ -61,10 +61,10 @@ Guardar la **URL** (formato `libsql://...`) y el **token**.
 5. **Build Command:** `npm run build:backend && npm run build:frontend`
 6. **Output Directory:** `dist`
 7. **Install Command:** `npm ci`
-8. Configurar **Environment Variables** (ver sección 4)
+8. Configurar **Environment Variables** (ver secciï¿½n 4)
 9. **Deploy**
 
-### Opción B: Desde CLI
+### Opciï¿½n B: Desde CLI
 
 ```bash
 vercel --prod
@@ -74,14 +74,14 @@ vercel --prod
 
 1. En Vercel Dashboard ? Project ? Settings ? Domains
 2. Agregar dominio (ej: `ruleta.tudominio.com`)
-3. Configurar DNS según instrucciones de Vercel:
+3. Configurar DNS segï¿½n instrucciones de Vercel:
    - **A record:** `76.76.21.21` (o CNAME a `cname.vercel-dns.com`)
    - **CNAME www:** `cname.vercel-dns.com`
-4. Vercel provisiona SSL automáticamente (Let's Encrypt)
+4. Vercel provisiona SSL automï¿½ticamente (Let's Encrypt)
 
 ## 7. Inicializar base de datos
 
-Después del primer deploy, la base de datos se inicializa automáticamente (auto-seed) al recibir la primera petición. Para forzar el seed manualmente:
+Despuï¿½s del primer deploy, la base de datos se inicializa automï¿½ticamente (auto-seed) al recibir la primera peticiï¿½n. Para forzar el seed manualmente:
 
 ```bash
 # En local con variables de entorno de Turso
@@ -96,14 +96,14 @@ Para aplicar migraciones pendientes:
 npm run db:migrate
 ```
 
-## 8. Verificación post-deploy
+## 8. Verificaciï¿½n post-deploy
 
 - **Health check:** `https://tudominio.com/api/health` ? `{"status":"OK"}`
 - **Frontend:** `https://tudominio.com` ? carga la ruleta
 - **Panel admin:** `https://tudominio.com/login-admin` ? login con `OPERATOR_PASSWORD`
-- **Configuración ruleta:** `https://tudominio.com/api/configuracion` ? JSON con premios activos
+- **Configuraciï¿½n ruleta:** `https://tudominio.com/api/configuracion` ? JSON con premios activos
 
-## 9. Comandos útiles
+## 9. Comandos ï¿½tiles
 
 ```bash
 # Desarrollo local (requiere .env con variables de Turso)
@@ -117,7 +117,7 @@ npm run build:all         # Frontend + Backend
 # Base de datos
 npm run db:seed           # Forzar seed
 npm run db:migrate        # Aplicar migraciones
-npm run db:push           # Verificar conexión Turso
+npm run db:push           # Verificar conexiï¿½n Turso
 
 # Tests
 npm test                  # Ejecutar tests
@@ -130,23 +130,23 @@ npm run typecheck         # Verificar tipos TypeScript
 ruleta/
 +-- api/index.ts          # Entry point serverless Vercel (carga backend/dist/app.js)
 +-- backend/              # Backend Express + TypeScript
-¦   +-- app.ts           # Router principal (API routes)
-¦   +-- server.ts        # Servidor local (express + cors)
-¦   +-- database.ts      # Cliente Turso + queries
-¦   +-- migrations.ts    # Migraciones idempotentes
-¦   +-- wheel.ts         # Constantes y utilidades ruleta
-¦   +-- tickets/         # Sistema de tickets QR
-¦   +-- auth/            # Autenticación operador (cookies firmadas)
+ï¿½   +-- app.ts           # Router principal (API routes)
+ï¿½   +-- server.ts        # Servidor local (express + cors)
+ï¿½   +-- database.ts      # Cliente Turso + queries
+ï¿½   +-- migrations.ts    # Migraciones idempotentes
+ï¿½   +-- wheel.ts         # Constantes y utilidades ruleta
+ï¿½   +-- tickets/         # Sistema de tickets QR
+ï¿½   +-- auth/            # Autenticaciï¿½n operador (cookies firmadas)
 +-- src/                 # Frontend React + Vite
-+-- vercel.json          # Configuración Vercel
-+-- package.json         # Scripts y dependencias raíz
++-- vercel.json          # Configuraciï¿½n Vercel
++-- package.json         # Scripts y dependencias raï¿½z
 +-- vite.config.ts       # Config Vite + proxy dev
 ```
 
 ## 11. Flujo de tickets (QR)
 
-1. **Panel operador** ? Crear lote de tickets (con etiqueta opcional, expiración)
-2. **Descargar ZIP** con códigos QR (PNG) + manifiesto CSV
+1. **Panel operador** ? Crear lote de tickets (con etiqueta opcional, expiraciï¿½n)
+2. **Descargar ZIP** con cï¿½digos QR (PNG) + manifiesto CSV
 3. **Usuario escanea QR** ? Abre `https://tudominio.com/?ticket=<token>#view=play&t=<token>`
 4. **POST /api/spin** valida token, reserva ticket, sortea premio, canjea
 5. **Panel operador** ve estado en tiempo real (polling `/api/tickets/batches/:id/live`)
@@ -154,18 +154,18 @@ ruleta/
 ## 12. Rollback
 
 ```bash
-# En Vercel Dashboard ? Deployments ? Promote to Production (versión anterior)
+# En Vercel Dashboard ? Deployments ? Promote to Production (versiï¿½n anterior)
 # O desde CLI:
 vercel rollback <deployment-url>
 ```
 
-## 13. Backup y restauración
+## 13. Backup y restauraciï¿½n
 
-- **Turso:** Backups automáticos diarios (plan gratis: 1 día, plan pago: 30 días)
-- **Restauración:** `turso db restore ruleta-prod --timestamp <timestamp>`
-- **Imágenes de premios:** Almacenadas en la BD como data URI base64
+- **Turso:** Backups automï¿½ticos diarios (plan gratis: 1 dï¿½a, plan pago: 30 dï¿½as)
+- **Restauraciï¿½n:** `turso db restore ruleta-prod --timestamp <timestamp>`
+- **Imï¿½genes de premios:** Almacenadas en la BD como data URI base64
 
-## 14. Lista de verificación al final
+## 14. Lista de verificaciï¿½n al final
 
 | Tarea | Estado |
 |-------|--------|
@@ -179,7 +179,7 @@ vercel rollback <deployment-url>
 | Tickets QR generables desde panel | |
 | Giro de ruleta funciona (con/sin ticket) | |
 
-## 15. Criterio de finalización
+## 15. Criterio de finalizaciï¿½n
 
 - [ ] `DEPLOYMENT.md` actualizado para Vercel + Turso
 - [ ] `.env.example` frontend actualizado (VITE_API_URL, VITE_BASE_PATH)

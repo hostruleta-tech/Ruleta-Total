@@ -24,17 +24,17 @@ export interface Prize {
 	probability: number;
 	/** Imagen del premio como data URL (solo se expone completa en el panel). */
 	image?: string | null;
-	/** URL pública y ligera para dibujar la imagen en la ruleta. */
+	/** URL pï¿½blica y ligera para dibujar la imagen en la ruleta. */
 	imageUrl?: string | null;
-	/** Dónde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
+	/** Dï¿½nde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
 	labelMode?: LabelMode | null;
 	/**
-	 * Casilla "Inténtalo de nuevo": al caer en ella no se consume el ticket y
+	 * Casilla "Intï¿½ntalo de nuevo": al caer en ella no se consume el ticket y
 	 * el participante puede volver a girar.
 	 */
 	isSpinAgain?: boolean;
 	/**
-	 * Sector fijo de la ruleta (0-5). `null` significa que el premio quedó
+	 * Sector fijo de la ruleta (0-5). `null` significa que el premio quedï¿½
 	 * fuera de la ruleta (por ejemplo, un premio sobrante de una plantilla
 	 * antigua).
 	 */
@@ -62,7 +62,7 @@ type Row = Record<string, unknown>;
 
 /**
  * Interfaz abstracta de base de datos.
- * Envuelve @libsql/client para minimizar cambios en el resto del código.
+ * Envuelve @libsql/client para minimizar cambios en el resto del cï¿½digo.
  */
 export interface DbClient {
 	execute(sql: string | { sql: string; args?: unknown[] }): Promise<{ rows: Row[]; rowsAffected?: number }>;
@@ -75,15 +75,24 @@ export interface DbClient {
 let client: ReturnType<typeof createClient> | null = null;
 let initPromise: Promise<DbClient> | null = null;
 
-function createDbClient(): DbClient {
-	const url = process.env.DATABASE_URL;
-	const authToken = process.env.TURSO_AUTH_TOKEN;
-
+/**
+ * Resuelve la URL de la base de datos. Se aceptan dos nombres de variable
+ * por compatibilidad: DATABASE_URL (DEPLOYMENT.md) o TURSO_DATABASE_URL
+ * (backend/.env.example). Basta con definir una de las dos.
+ */
+function getDatabaseUrl(): string {
+	const url = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
 	if (!url) {
 		throw new Error(
-			"DATABASE_URL debe estar definida en el entorno (libsql://... para Turso).",
+			"DATABASE_URL (o TURSO_DATABASE_URL) debe estar definida en el entorno (libsql://... para Turso).",
 		);
 	}
+	return url;
+}
+
+function createDbClient(): DbClient {
+	const url = getDatabaseUrl();
+	const authToken = process.env.TURSO_AUTH_TOKEN;
 
 	const c = createClient({ url, authToken });
 
@@ -149,7 +158,7 @@ const DEFAULT_SECTOR_COLORS = [
 	"#4A7C3F",
 ];
 
-/** Premio base para un sector que todavía no tiene datos configurados. */
+/** Premio base para un sector que todavï¿½a no tiene datos configurados. */
 function createSectorPlaceholder(rouletteId: number, sectorIndex: number): Prize {
 	return {
 		roulette_id: rouletteId,
@@ -193,7 +202,7 @@ function normalizeSectorPrizes(rouletteId: number, prizes: Prize[]): Prize[] {
 }
 
 /**
- * Migración de datos: asigna 0..5 a los primeros 6 premios de cada plantilla.
+ * Migraciï¿½n de datos: asigna 0..5 a los primeros 6 premios de cada plantilla.
  * Los sobrantes quedan sin sector; en la plantilla activa se eliminan.
  */
 export async function backfillSectorIndexes(client: DbClient): Promise<void> {
@@ -240,12 +249,12 @@ async function ensureInitialized(): Promise<DbClient> {
 
 	initPromise = (async () => {
 		client = createClient({
-			url: process.env.TURSO_DATABASE_URL!,
+			url: getDatabaseUrl(),
 			authToken: process.env.TURSO_AUTH_TOKEN,
 		});
 		const db = createDbClient();
 
-		// Crear tablas base en un solo lote atómico
+		// Crear tablas base en un solo lote atï¿½mico
 		await client.batch([
 			{
 				sql: `CREATE TABLE IF NOT EXISTS roulettes (
@@ -297,10 +306,10 @@ async function ensureInitialized(): Promise<DbClient> {
 		// Migraciones del sistema de tickets (idempotentes)
 		const appliedMigrations = await runMigrations(db);
 		for (const id of appliedMigrations) {
-			console.log(`[db] Migración aplicada: ${id}`);
+			console.log(`[db] Migraciï¿½n aplicada: ${id}`);
 		}
 
-		// Auto-seed solo si la base está totalmente vacía.
+		// Auto-seed solo si la base estï¿½ totalmente vacï¿½a.
 		const countResult = await db.execute(
 			"SELECT COUNT(*) AS total FROM roulettes",
 		);
@@ -334,7 +343,7 @@ async function ensureInitialized(): Promise<DbClient> {
 					);
 				}
 			}
-			console.log("[db] Base vacía: plantillas iniciales creadas.");
+			console.log("[db] Base vacï¿½a: plantillas iniciales creadas.");
 		}
 
 		return db;
@@ -343,7 +352,7 @@ async function ensureInitialized(): Promise<DbClient> {
 	try {
 		return await initPromise;
 	} catch (error) {
-		// Permite reintentar en la siguiente petición si falló la conexión.
+		// Permite reintentar en la siguiente peticiï¿½n si fallï¿½ la conexiï¿½n.
 		initPromise = null;
 		client = null;
 		throw error;
@@ -556,7 +565,7 @@ export async function getPrizeImage(id: number): Promise<string | null> {
 }
 
 /**
- * Devuelve la calibración global de la ruleta (fila única id=1).
+ * Devuelve la calibraciï¿½n global de la ruleta (fila ï¿½nica id=1).
  * La tabla y su fila por defecto se crean en `ensureInitialized`.
  */
 export async function getWheelCalibration(): Promise<WheelCalibration> {
@@ -593,7 +602,7 @@ export async function getWheelCalibration(): Promise<WheelCalibration> {
 	};
 }
 
-/** Guarda la calibración global de la ruleta (upsert de la fila id=1). */
+/** Guarda la calibraciï¿½n global de la ruleta (upsert de la fila id=1). */
 export async function saveWheelCalibration(
 	calibration: WheelCalibration,
 ): Promise<WheelCalibration> {

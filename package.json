@@ -21,7 +21,7 @@
 		"test:watch": "vitest",
 		"clean": "rimraf dist",
 		"typecheck": "tsc -p tsconfig.app.json --noEmit",
-		"dev:backend": "tsx watch backend/server.ts",
+		"dev:backend": "tsx watch --env-file=.env backend/server.ts",
 		"dev:full": "concurrently \"npm run dev\" \"npm run dev:backend\""
 	},
 	"dependencies": {
