@@ -77,7 +77,7 @@ let initPromise: Promise<DbClient> | null = null;
 
 function createDbClient(): DbClient {
 	const url = process.env.DATABASE_URL;
-	const authToken = process.env.DATABASE_AUTH_TOKEN;
+	const authToken = process.env.TURSO_AUTH_TOKEN;
 
 	if (!url) {
 		throw new Error(
@@ -240,8 +240,8 @@ async function ensureInitialized(): Promise<DbClient> {
 
 	initPromise = (async () => {
 		client = createClient({
-			url: process.env.DATABASE_URL!,
-			authToken: process.env.DATABASE_AUTH_TOKEN,
+			url: process.env.TURSO_DATABASE_URL!,
+			authToken: process.env.TURSO_AUTH_TOKEN,
 		});
 		const db = createDbClient();
 
