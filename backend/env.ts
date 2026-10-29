@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { config } from "dotenv";
 
 /**
- * Carga `.env` sin depender de cu√°l sea el directorio de trabajo.
+ * Carga `.env` sin depender de cu·l sea el directorio de trabajo.
  *
  * `tsx watch` relanza el proceso con cwd = `backend/`, mientras que
- * `npm run db:seed` lo ejecuta con cwd = ra√≠z del proyecto. Probamos
+ * `npm run db:seed` lo ejecuta con cwd = raÌz del proyecto. Probamos
  * ambas ubicaciones para que funcione en los dos casos.
  */
 const candidates = [

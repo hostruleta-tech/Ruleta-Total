@@ -2,7 +2,7 @@
 /**
  * Datos iniciales de las plantillas.
  * Se usan tanto en el seed manual (backend/seed.ts) como en el
- * auto-seed de una base vacÃ­a (backend/database.ts).
+ * auto-seed de una base vacía (backend/database.ts).
  *
  * La ruleta tiene 6 sectores fijos. Cada plantilla debe tener exactamente
  * una entrada por sector, con `sectorIndex` de 0 a 5.
@@ -13,7 +13,7 @@ export interface SeedPrize {
 	probability: number;
 	/** Sector fijo de la ruleta (0-5). */
 	sectorIndex: number;
-	/** true = casilla "IntÃ©ntalo de nuevo" (no consume el ticket). */
+	/** true = casilla "Inténtalo de nuevo" (no consume el ticket). */
 	isSpinAgain?: boolean;
 }
 
@@ -47,7 +47,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
 				sectorIndex: 2,
 			},
 			{
-				name: "IntÃ©ntalo de nuevo",
+				name: "Inténtalo de nuevo",
 				backgroundColor: "#DC143C",
 				probability: 65,
 				sectorIndex: 3,
@@ -68,7 +68,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
 		],
 	},
 	{
-		name: "PromociÃ³n Total Tools",
+		name: "Promoción Total Tools",
 		isActive: true,
 		prizes: [
 			{

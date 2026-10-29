@@ -1,206 +1,191 @@
-# DEPLOYMENT.md â€” Ruleta TOTAL (Ubuntu 24.04 + MariaDB + ServerAvatar Panel)
+# DEPLOYMENT.md — Ruleta TOTAL (Vercel + Turso)
 
-## 1. Requisitos y entorno del VPS
+## 1. Arquitectura
 
-- **Ubuntu 24.04** con **ServerAvatar** (panel web, **sin SSH**)
-- **MariaDB** disponible en el VPS
-- Acceso al panel web de ServerAvatar para:
-  - Crear base de datos y usuario MariaDB
-  - Configurar dominio y SSL (certificado Let's Encrypt)
-  - Crear el sitio web/aplicaciÃ³n y configurar proxy inverso
-- **No hay acceso SSH**; todo se hace desde el panel de ServerAvatar
+- **Frontend + Backend:** Monorepo desplegado en **Vercel** (una sola app)
+- **Base de datos:** **Turso (libSQL)** - SQLite serverless, réplicas globales
+- **DNS:** Dominio personalizado apuntando a Vercel
 
-## 2. InformaciÃ³n previa que debe proporcionar el administrador
+## 2. Requisitos previos
 
-| Variable | Valor a proporcionar por el admin |
-|----------|----------------------------|
-| `MARIADB_HOST` | Ej. `127.0.0.1` o `localhost` |
-| `MARIADB_PORT` | Ej. `3306` |
-| `MARIADB_DATABASE` | Nombre de la base de datos MariaDB |
-| `MARIADB_USER` | Usuario MariaDB (con privilegios mÃ­nimos: SELECT, INSERT, UPDATE, DELETE) |
-| `MARIADB_PASSWORD` | ContraseÃ±a del usuario MariaDB |
-| `OPERATOR_PASSWORD` | ContraseÃ±a fuerte para panel de operador |
-| `TICKET_ENCRYPTION_KEY` | 32 bytes base64 (generar con `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`) |
-| `PUBLIC_APP_URL` | Ej. `https://ruleta.tudominio.com` |
-| `PORT` | (opcional) puerto del backend, default `3001` |
-| `NODE_ENV` | `production` (se fuerza en el script de inicio) |
-| `SESSION_SECRET` | Secreto para sesiones (opcional) |
+- Cuenta en [Vercel](https://vercel.com)
+- Cuenta en [Turso](https://turso.tech) (gratis hasta 500 DBs)
+- CLI de Turso instalado: `curl -sSfL https://get.turso.tech/install.sh | bash`
 
-## 3. Crear base de datos y usuario en MariaDB (panel ServerAvatar)
-
-Desde el panel de ServerAvatar:
-
-1. Ir a la secciÃ³n **Bases de datos** â†’ MariaDB
-2. Crear una nueva base de datos, por ejemplo `ruleta_prod`
-3. Crear un nuevo usuario, por ejemplo `ruleta_app`
-4. Asignar privilegios mÃ­nimos al usuario sobre la base de datos:
-   - `SELECT`, `INSERT`, `UPDATE`, `DELETE`
-5. Anotar las credenciales para el archivo `.env`
-
-## 4. Variables de entorno (`.env`)
-
-Copiar `.env.example` â†’ `.env` y completar valores reales:
+## 3. Crear base de datos en Turso
 
 ```bash
-cp .env.example .env
+# Crear la base de datos
+turso db create ruleta-prod
+
+# Obtener URL de conexión
+turso db show ruleta-prod --url
+
+# Crear token de autenticación
+turso db tokens create ruleta-prod
 ```
 
-Editar `.env` con las credenciales reales de MariaDB y los demÃ¡s valores.
+Guardar la **URL** (formato `libsql://...`) y el **token**.
 
-**Nota:** El usuario prefiere que los secretos estÃ©n en `.env` (no en variables de entorno del panel). El archivo `.env` debe subirse al servidor por medio del panel de archivos de ServerAvatar.
+## 4. Variables de entorno
 
-## 5. InstalaciÃ³n y compilaciÃ³n
+### Frontend (configurar en Vercel Dashboard ? Settings ? Environment Variables)
 
-El cÃ³digo ya estÃ¡ preparado para MariaDB. Instalar dependencias y compilar:
+| Variable | Valor | Descripción |
+|----------|-------|-------------|
+| `VITE_API_URL` | `/api` | En Vercel, el backend está en el mismo dominio |
+| `VITE_BASE_PATH` | `/` | Cambiar si se despliega en subdirectorio |
+
+### Backend (configurar en Vercel Dashboard ? Settings ? Environment Variables)
+
+| Variable | Valor | Descripción |
+|----------|-------|-------------|
+| `DATABASE_URL` | `libsql://ruleta-prod-usuario.turso.io` | URL de Turso |
+| `DATABASE_AUTH_TOKEN` | `eyJ...` | Token de autenticación de Turso |
+| `OPERATOR_PASSWORD` | `contraseña_segura` | Password para panel de operador |
+| `SESSION_SECRET` | `32_bytes_hex` | Generar: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `TICKET_ENCRYPTION_KEY` | `32_bytes_base64` | Generar: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+| `PUBLIC_APP_URL` | `https://tudominio.com` | URL pública HTTPS para QR codes |
+| `NODE_ENV` | `production` | Forzado en producción |
+
+**?? IMPORTANTE:** Nunca subir archivos `.env` al repositorio. Todas las variables secretas se configuran en Vercel Dashboard.
+
+## 5. Despliegue en Vercel
+
+### Opción A: Desde Vercel Dashboard (recomendado)
+
+1. Ir a [Vercel Dashboard](https://vercel.com/dashboard)
+2. **Add New...** ? **Project**
+3. Importar repositorio de GitHub/GitLab/Bitbucket
+4. **Framework Preset:** Other
+5. **Build Command:** `npm run build:backend && npm run build:frontend`
+6. **Output Directory:** `dist`
+7. **Install Command:** `npm ci`
+8. Configurar **Environment Variables** (ver sección 4)
+9. **Deploy**
+
+### Opción B: Desde CLI
 
 ```bash
-cd /opt/ruleta-TOTAL
-npm ci
-npm run build:all
+vercel --prod
 ```
 
-Scripts disponibles:
-- `npm run build:backend` â€” compila solo el backend (TypeScript â†’ JavaScript)
-- `npm run build` â€” compila el frontend
-- `npm run build:all` â€” compila todo
-- `npm start` â€” inicia el backend (`node backend/dist/server.js`)
+## 6. Configurar dominio personalizado
 
-## 6. ConfiguraciÃ³n del sitio en ServerAvatar
+1. En Vercel Dashboard ? Project ? Settings ? Domains
+2. Agregar dominio (ej: `ruleta.tudominio.com`)
+3. Configurar DNS según instrucciones de Vercel:
+   - **A record:** `76.76.21.21` (o CNAME a `cname.vercel-dns.com`)
+   - **CNAME www:** `cname.vercel-dns.com`
+4. Vercel provisiona SSL automáticamente (Let's Encrypt)
 
-### 6.1 Crear sitio web
+## 7. Inicializar base de datos
 
-Desde el panel de ServerAvatar:
-1. Ir a **Sitios web** â†’ Crear sitio
-2. Dominio: `ruleta.tudominio.com`
-3. Tipo de aplicaciÃ³n: **Node.js** (o aplicaciÃ³n personalizada)
-4. Directorio raÃ­z: `/opt/ruleta-TOTAL` (o donde estÃ© el repositorio)
-
-### 6.2 Proxy inverso para la API
-
-Configurar proxy inverso para que las peticiones a `/api/*` lleguen al backend Node.js:
-
-- **Origen:** `http://127.0.0.1:3001/` (o el puerto definido en `.env`)
-- **Ruta proxy:** `/api/`
-
-### 6.3 SPA (Frontend) catch-all
-
-Configurar regla de reescritura para que el SPA del frontend maneje rutas no encontradas:
-
-```
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI} !^/api
-RewriteRule ^(.*)$ /index.html [L]
-```
-
-### 6.4 SSL / HTTPS
-
-1. En ServerAvatar, ir a **SSL** para el dominio
-2. Solicitar certificado Let's Encrypt
-3. Forzar HTTPS (redirigir HTTP â†’ HTTPS)
-
-## 7. Inicio del backend
-
-El backend debe correr como un proceso persistente. Desde el panel de ServerAvatar:
-
-### OpciÃ³n A: Usar el gestor de procesos de ServerAvatar (recomendado)
-
-Si ServerAvatar soporta iniciar aplicaciones Node.js, usar:
-- **Comando de inicio:** `npm start` (o `node backend/dist/server.js`)
-- **Directorio de trabajo:** `/opt/ruleta-TOTAL`
-- **Variables de entorno:** cargar desde `.env`
-
-### OpciÃ³n B: Script de inicio personalizado
-
-Crear un script `scripts/prod-start.sh`:
+Después del primer deploy, la base de datos se inicializa automáticamente (auto-seed) al recibir la primera petición. Para forzar el seed manualmente:
 
 ```bash
-#!/bin/bash
-cd /opt/ruleta-TOTAL
-export NODE_ENV=production
-node backend/dist/server.js
+# En local con variables de entorno de Turso
+npm run db:seed
+# O directamente:
+npx tsx backend/seed.ts
 ```
 
-Y configurarlo para que se ejecute al iniciar el servidor (si el panel lo permite).
-
-### OpciÃ³n C: PM2 (si estÃ¡ instalado en el VPS)
+Para aplicar migraciones pendientes:
 
 ```bash
-pm2 start backend/dist/server.js --name ruleta-backend
-pm2 save
+npm run db:migrate
 ```
 
-## 8. Health check
+## 8. Verificación post-deploy
+
+- **Health check:** `https://tudominio.com/api/health` ? `{"status":"OK"}`
+- **Frontend:** `https://tudominio.com` ? carga la ruleta
+- **Panel admin:** `https://tudominio.com/login-admin` ? login con `OPERATOR_PASSWORD`
+- **Configuración ruleta:** `https://tudominio.com/api/configuracion` ? JSON con premios activos
+
+## 9. Comandos útiles
 
 ```bash
-curl -f -s http://localhost:3001/api/health
+# Desarrollo local (requiere .env con variables de Turso)
+npm run dev:full          # Frontend (5177) + Backend (3001) concurrentemente
+npm run dev               # Solo frontend
+npm run dev:backend       # Solo backend
+
+# Build local
+npm run build:all         # Frontend + Backend
+
+# Base de datos
+npm run db:seed           # Forzar seed
+npm run db:migrate        # Aplicar migraciones
+npm run db:push           # Verificar conexión Turso
+
+# Tests
+npm test                  # Ejecutar tests
+npm run typecheck         # Verificar tipos TypeScript
 ```
 
-Desde fuera del servidor (detrÃ¡s del proxy de ServerAvatar):
+## 10. Estructura del monorepo
+
+```
+ruleta/
++-- api/index.ts          # Entry point serverless Vercel (carga backend/dist/app.js)
++-- backend/              # Backend Express + TypeScript
+¦   +-- app.ts           # Router principal (API routes)
+¦   +-- server.ts        # Servidor local (express + cors)
+¦   +-- database.ts      # Cliente Turso + queries
+¦   +-- migrations.ts    # Migraciones idempotentes
+¦   +-- wheel.ts         # Constantes y utilidades ruleta
+¦   +-- tickets/         # Sistema de tickets QR
+¦   +-- auth/            # Autenticación operador (cookies firmadas)
++-- src/                 # Frontend React + Vite
++-- vercel.json          # Configuración Vercel
++-- package.json         # Scripts y dependencias raíz
++-- vite.config.ts       # Config Vite + proxy dev
+```
+
+## 11. Flujo de tickets (QR)
+
+1. **Panel operador** ? Crear lote de tickets (con etiqueta opcional, expiración)
+2. **Descargar ZIP** con códigos QR (PNG) + manifiesto CSV
+3. **Usuario escanea QR** ? Abre `https://tudominio.com/?ticket=<token>#view=play&t=<token>`
+4. **POST /api/spin** valida token, reserva ticket, sortea premio, canjea
+5. **Panel operador** ve estado en tiempo real (polling `/api/tickets/batches/:id/live`)
+
+## 12. Rollback
 
 ```bash
-curl -f -s -o /dev/null https://ruleta.tudominio.com/api/health || exit 1
+# En Vercel Dashboard ? Deployments ? Promote to Production (versión anterior)
+# O desde CLI:
+vercel rollback <deployment-url>
 ```
 
-## 9. Logs y diagnÃ³stico
+## 13. Backup y restauración
 
-- **Backend:** stdout/stderr del proceso Node (consola del panel de ServerAvatar o archivos de log)
-- **Servidor web:** logs de nginx/Apache segÃºn lo configurado en ServerAvatar
+- **Turso:** Backups automáticos diarios (plan gratis: 1 día, plan pago: 30 días)
+- **Restauración:** `turso db restore ruleta-prod --timestamp <timestamp>`
+- **Imágenes de premios:** Almacenadas en la BD como data URI base64
 
-## 10. ActualizaciÃ³n
-
-1. Pull del repositorio:
-   ```bash
-   cd /opt/ruleta-TOTAL
-   git pull
-   npm ci
-   npm run build:all
-   ```
-2. Reiniciar el backend desde el panel de ServerAvatar
-
-## 11. Rollback
-
-Si un deploy introduce regresiones:
-
-- Usar `git checkout <commit>` para volver a una versiÃ³n anterior
-- Recompilar (`npm run build:all`)
-- Reiniciar el backend
-
-## 12. Backup y restauraciÃ³n
-
-- **Base de datos MariaDB:** Usar las herramientas de backup de ServerAvatar para MariaDB (o `mysqldump` desde el panel si estÃ¡ disponible)
-- **ImÃ¡genes de premios:** Almacenadas en la BD como data URI base64; se respaldan automÃ¡ticamente con la BD.
-
-## 13. Tareas de acceso administrativo (solo admin del VPS)
-
-- Crear base de datos y usuario MariaDB (panel ServerAvatar)
-- Configurar dominio, DNS y SSL (panel ServerAvatar)
-- Crear el sitio web y configurar proxy inverso (panel ServerAvatar)
-- Subir el archivo `.env` con los secretos (gestor de archivos de ServerAvatar)
-- Configurar el proceso persistente del backend (panel ServerAvatar)
-
-## 14. Lista de verificaciÃ³n al final
+## 14. Lista de verificación al final
 
 | Tarea | Estado |
 |-------|--------|
-| MariaDB creada con usuario y privilegios mÃ­nimos | |
-| `.env` subido con credenciales reales | |
-| Dependencias instaladas (`npm ci`) | |
-| Backend compilado (`npm run build:all`) | |
-| Sitio web creado en ServerAvatar | |
-| Proxy inverso configurado para `/api/` | |
-| SSL/HTTPS activo | |
-| Backend corriendo como proceso persistente | |
-| Health check exitoso (`/api/health`) | |
-| Login de operador funciona (cookie) | |
-| SPA del frontend carga correctamente | |
+| Base de datos Turso creada | |
+| Variables de entorno configuradas en Vercel | |
+| Dominio personalizado configurado + SSL | |
+| Deploy exitoso en Vercel | |
+| Health check `/api/health` OK | |
+| Login operador funciona (cookie) | |
+| SPA frontend carga correctamente | |
+| Tickets QR generables desde panel | |
+| Giro de ruleta funciona (con/sin ticket) | |
 
-## 15. Criterio de finalizaciÃ³n
+## 15. Criterio de finalización
 
-- [ ] Scripts de producciÃ³n verificados
-- [ ] `.env.example` actualizado con variables MariaDB
-- [ ] `package.json` corregido (`start` â†’ `node backend/dist/server.js`)
-- [ ] Seguridad verificada (CORS, rate-limit, cookies seguras)
-- [ ] Tests (`npm test`) pasando
-- [ ] `DEPLOYMENT.md` entregado al admin
-- [ ] Plan de rollback documentado
+- [ ] `DEPLOYMENT.md` actualizado para Vercel + Turso
+- [ ] `.env.example` frontend actualizado (VITE_API_URL, VITE_BASE_PATH)
+- [ ] `backend/.env.example` actualizado (DATABASE_URL, DATABASE_AUTH_TOKEN, etc.)
+- [ ] `package.json` sin mysql2, con @libsql/client
+- [ ] Build local exitoso (`npm run build:all`)
+- [ ] Tests pasando (`npm test`)
+- [ ] Deploy en Vercel funcionando
+- [ ] DNS propagado y SSL activo

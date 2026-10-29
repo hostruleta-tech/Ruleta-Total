@@ -16,7 +16,7 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"mysql2": "^3.11.0",
+		"@libsql/client": "^0.15.15",
 		"cors": "^2.8.5",
 		"express": "^5.1.0"
 	}

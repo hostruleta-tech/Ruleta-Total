@@ -1,6 +1,6 @@
-import mysql from "mysql2/promise";
-import { getDb } from "../../database";
+import { createClient } from "@libsql/client";
 import { runMigrations } from "../../migrations";
+import type { DbClient } from "../../database";
 
 export const TEST_KEY = Buffer.alloc(32, 7).toString("base64");
 export const TEST_BASE_URL = "https://ruleta.test";
@@ -43,16 +43,26 @@ export function restoreEnv(saved: SavedEnv): void {
 	}
 }
 
-export async function createTestClient(): Promise<mysql.Pool> {
-	const connection = await mysql.createConnection({
-		host: process.env.MARIADB_HOST ?? "127.0.0.1",
-		port: Number(process.env.MARIADB_PORT ?? 3306),
-		database: process.env.MARIADB_DATABASE,
-		user: process.env.MARIADB_USER,
-		password: process.env.MARIADB_PASSWORD,
-	});
+/** Crea un cliente de BD en memoria para tests y ejecuta migraciones. */
+export async function createTestDb(): Promise<DbClient> {
+	const client = createClient({ url: ":memory:" });
 
-	return connection;
+	const db: DbClient = {
+		async execute(input: string | { sql: string; args?: unknown[] }) {
+			const sql = typeof input === "string" ? input : input.sql;
+			const args = typeof input === "string" ? [] : (input.args ?? []);
+			const result = await client.execute({ sql, args: args as any[] });
+			return { rows: result.rows as Record<string, unknown>[], rowsAffected: result.rowsAffected ?? 0 };
+		},
+		async batch(statements, _mode) {
+			await client.batch(statements.map((s) => ({ sql: s.sql, args: s.args as any[] })));
+		},
+	};
+
+	// Ejecutar migraciones del sistema de tickets
+	await runMigrations(db);
+
+	return db;
 }
 
 export function tokenFromParticipationUrl(url: string): string {

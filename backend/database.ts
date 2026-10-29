@@ -1,5 +1,4 @@
-import "./env";
-import mysql from "mysql2/promise";
+import { createClient } from "@libsql/client";
 import { runMigrations } from "./migrations";
 import { SEED_TEMPLATES } from "./seed-data";
 import {
@@ -25,17 +24,17 @@ export interface Prize {
 	probability: number;
 	/** Imagen del premio como data URL (solo se expone completa en el panel). */
 	image?: string | null;
-	/** URL pÃºblica y ligera para dibujar la imagen en la ruleta. */
+	/** URL pública y ligera para dibujar la imagen en la ruleta. */
 	imageUrl?: string | null;
-	/** DÃ³nde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
+	/** Dónde mostrar el nombre del premio: "wheel"=en la ruleta, "win"=solo al ganar, "both"=ambos. */
 	labelMode?: LabelMode | null;
 	/**
-	 * Casilla "IntÃ©ntalo de nuevo": al caer en ella no se consume el ticket y
+	 * Casilla "Inténtalo de nuevo": al caer en ella no se consume el ticket y
 	 * el participante puede volver a girar.
 	 */
 	isSpinAgain?: boolean;
 	/**
-	 * Sector fijo de la ruleta (0-5). `null` significa que el premio quedÃ³
+	 * Sector fijo de la ruleta (0-5). `null` significa que el premio quedó
 	 * fuera de la ruleta (por ejemplo, un premio sobrante de una plantilla
 	 * antigua).
 	 */
@@ -62,8 +61,8 @@ export interface Migration {
 type Row = Record<string, unknown>;
 
 /**
- * Interfaz compatible con la antigua API de @libsql/client.
- * Envuelve mysql2/promise Pool para minimizar cambios en el resto del cÃ³digo.
+ * Interfaz abstracta de base de datos.
+ * Envuelve @libsql/client para minimizar cambios en el resto del código.
  */
 export interface DbClient {
 	execute(sql: string | { sql: string; args?: unknown[] }): Promise<{ rows: Row[]; rowsAffected?: number }>;
@@ -73,56 +72,42 @@ export interface DbClient {
 	): Promise<void>;
 }
 
-let pool: mysql.Pool | null = null;
+let client: ReturnType<typeof createClient> | null = null;
 let initPromise: Promise<DbClient> | null = null;
 
 function createDbClient(): DbClient {
-	const host = process.env.MARIADB_HOST ?? "127.0.0.1";
-	const port = Number(process.env.MARIADB_PORT ?? 3306);
-	const database = process.env.MARIADB_DATABASE;
-	const user = process.env.MARIADB_USER;
-	const password = process.env.MARIADB_PASSWORD;
+	const url = process.env.DATABASE_URL;
+	const authToken = process.env.DATABASE_AUTH_TOKEN;
 
-	if (!database || !user || password == null) {
+	if (!url) {
 		throw new Error(
-			"MARIADB_DATABASE, MARIADB_USER y MARIADB_PASSWORD deben estar definidos en el entorno.",
+			"DATABASE_URL debe estar definida en el entorno (libsql://... para Turso).",
 		);
 	}
 
-	const p = mysql.createPool({
-		host,
-		port,
-		database,
-		user,
-		password,
-		connectionLimit: 10,
-	});
+	const c = createClient({ url, authToken });
 
 	return {
 		async execute(input: string | { sql: string; args?: unknown[] }) {
-			const sql =
-				typeof input === "string" ? input : input.sql;
-			const args =
-				typeof input === "string" ? [] : (input.args ?? []);
+			const sql = typeof input === "string" ? input : input.sql;
+			const args = typeof input === "string" ? [] : (input.args ?? []);
 
-			const [rows] = await p.query(sql, args);
-			const result = rows as Row[] & { affectedRows?: number };
-			return { rows: result, rowsAffected: result.affectedRows ?? 0 };
+			const result = await c.execute({
+				sql,
+				args: args as Array<string | number | bigint | null>,
+			});
+			return {
+				rows: result.rows as Row[],
+				rowsAffected: result.rowsAffected ?? 0,
+			};
 		},
 		async batch(statements, _mode) {
-			const connection = await p.getConnection();
-			try {
-				await connection.beginTransaction();
-				for (const stmt of statements) {
-					await connection.query(stmt.sql, stmt.args ?? []);
-				}
-				await connection.commit();
-			} catch (error) {
-				await connection.rollback();
-				throw error;
-			} finally {
-				connection.release();
-			}
+			await c.batch(
+				statements.map((s) => ({
+					sql: s.sql,
+					args: (s.args ?? []) as Array<string | number | bigint | null>,
+				})),
+			);
 		},
 	};
 }
@@ -164,7 +149,7 @@ const DEFAULT_SECTOR_COLORS = [
 	"#4A7C3F",
 ];
 
-/** Premio base para un sector que todavÃ­a no tiene datos configurados. */
+/** Premio base para un sector que todavía no tiene datos configurados. */
 function createSectorPlaceholder(rouletteId: number, sectorIndex: number): Prize {
 	return {
 		roulette_id: rouletteId,
@@ -208,7 +193,7 @@ function normalizeSectorPrizes(rouletteId: number, prizes: Prize[]): Prize[] {
 }
 
 /**
- * MigraciÃ³n de datos: asigna 0..5 a los primeros 6 premios de cada plantilla.
+ * Migración de datos: asigna 0..5 a los primeros 6 premios de cada plantilla.
  * Los sobrantes quedan sin sector; en la plantilla activa se eliminan.
  */
 export async function backfillSectorIndexes(client: DbClient): Promise<void> {
@@ -248,44 +233,45 @@ export async function backfillSectorIndexes(client: DbClient): Promise<void> {
 }
 
 async function ensureInitialized(): Promise<DbClient> {
-	if (pool) {
-		// Retornar cliente existente usando el pool ya creado
+	if (client) {
 		return createDbClient();
 	}
 	if (initPromise) return initPromise;
 
 	initPromise = (async () => {
-		const client = createDbClient();
-		const p = pool!;
+		client = createClient({
+			url: process.env.DATABASE_URL!,
+			authToken: process.env.DATABASE_AUTH_TOKEN,
+		});
+		const db = createDbClient();
 
-		// Crear tablas base usando transacciÃ³n (equivalente a client.batch "write")
-		const connection = await p.getConnection();
-		try {
-			await connection.beginTransaction();
-
-			await connection.query(`
-            CREATE TABLE IF NOT EXISTS roulettes (
-              id INTEGER PRIMARY KEY AUTO_INCREMENT,
+		// Crear tablas base en un solo lote atómico
+		await client.batch([
+			{
+				sql: `CREATE TABLE IF NOT EXISTS roulettes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
               name TEXT NOT NULL UNIQUE,
-              is_active TINYINT(1) NOT NULL DEFAULT 0
-            )
-          `);
-
-			await connection.query(`
-            CREATE TABLE IF NOT EXISTS prizes (
-              id INTEGER PRIMARY KEY AUTO_INCREMENT,
+              is_active INTEGER NOT NULL DEFAULT 0
+            )`,
+				args: [],
+			},
+			{
+				sql: `CREATE TABLE IF NOT EXISTS prizes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
               roulette_id INTEGER NOT NULL,
               name TEXT NOT NULL,
               backgroundColor TEXT NOT NULL,
               probability REAL NOT NULL,
               image TEXT,
+              label_mode TEXT NOT NULL DEFAULT 'both',
+              is_spin_again INTEGER NOT NULL DEFAULT 0,
               sector_index INTEGER,
               FOREIGN KEY (roulette_id) REFERENCES roulettes (id) ON DELETE CASCADE
-            )
-          `);
-
-			await connection.query(`
-            CREATE TABLE IF NOT EXISTS wheel_settings (
+            )`,
+				args: [],
+			},
+			{
+				sql: `CREATE TABLE IF NOT EXISTS wheel_settings (
               id INTEGER PRIMARY KEY CHECK (id = 1),
               alignment_offset REAL NOT NULL DEFAULT 0,
               initial_angle REAL NOT NULL DEFAULT 75,
@@ -294,122 +280,52 @@ async function ensureInitialized(): Promise<DbClient> {
               disk_scale REAL NOT NULL DEFAULT 1,
               disk_rotation REAL NOT NULL DEFAULT 0,
               updated_at TEXT
-            )
-          `);
-
-			await connection.query(
-				`INSERT IGNORE INTO wheel_settings (id, alignment_offset, initial_angle, updated_at) VALUES (?, ?, ?)`,
-				[
+            )`,
+				args: [],
+			},
+			{
+				sql: `INSERT OR IGNORE INTO wheel_settings (id, alignment_offset, initial_angle, updated_at)
+                VALUES (1, ?, ?, ?)`,
+				args: [
 					WHEEL_DEFAULT_ALIGNMENT_OFFSET,
 					WHEEL_DEFAULT_INITIAL_ANGLE,
 					new Date().toISOString(),
 				],
-			);
+			},
+		]);
 
-			await connection.commit();
-		} catch (error) {
-			await connection.rollback();
-			throw error;
-		} finally {
-			connection.release();
-		}
-
-		// MigraciÃ³n: columna image en prizes
-		const prizeColumns = await client.execute("SHOW COLUMNS FROM prizes");
-		const hasImageColumn = prizeColumns.rows.some(
-			(column) => column.Field === "image",
-		);
-		if (!hasImageColumn) {
-			await client.execute("ALTER TABLE prizes ADD COLUMN image TEXT");
-			console.log("[db] Columna 'image' agregada a la tabla prizes.");
-		}
-
-		// MigraciÃ³n: columna label_mode
-		const hasLabelModeColumn = prizeColumns.rows.some(
-			(column) => column.Field === "label_mode",
-		);
-		if (!hasLabelModeColumn) {
-			await client.execute(
-				"ALTER TABLE prizes ADD COLUMN label_mode TEXT NOT NULL DEFAULT 'both'",
-			);
-			console.log("[db] Columna 'label_mode' agregada a la tabla prizes.");
-		}
-
-		// MigraciÃ³n: columna is_spin_again
-		const hasSpinAgainColumn = prizeColumns.rows.some(
-			(column) => column.Field === "is_spin_again",
-		);
-		if (!hasSpinAgainColumn) {
-			await client.execute(
-				"ALTER TABLE prizes ADD COLUMN is_spin_again TINYINT(1) NOT NULL DEFAULT 0",
-			);
-			console.log("[db] Columna 'is_spin_again' agregada a la tabla prizes.");
-		}
-
-		// MigraciÃ³n: columna sector_index
-		const hasSectorColumn = prizeColumns.rows.some(
-			(column) => column.Field === "sector_index",
-		);
-		if (!hasSectorColumn) {
-			await client.execute("ALTER TABLE prizes ADD COLUMN sector_index INTEGER");
-			console.log("[db] Columna 'sector_index' agregada a la tabla prizes.");
-			await backfillSectorIndexes(client);
-		}
-
-		// MigraciÃ³n: columnas de wheel_settings
-		const wheelSettingsColumns = await client.execute("SHOW COLUMNS FROM wheel_settings");
-		const wheelColumnNames = new Set(
-			wheelSettingsColumns.rows.map((column) => column.Field),
-		);
-		const wheelColumnMigrations: Array<{ name: string; sql: string }> = [
-			{ name: "disk_offset_x", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_x REAL NOT NULL DEFAULT 0" },
-			{ name: "disk_offset_y", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_offset_y REAL NOT NULL DEFAULT 16" },
-			{ name: "disk_scale", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_scale REAL NOT NULL DEFAULT 1" },
-			{ name: "disk_rotation", sql: "ALTER TABLE wheel_settings ADD COLUMN disk_rotation REAL NOT NULL DEFAULT 0" },
-		];
-		for (const migration of wheelColumnMigrations) {
-			if (wheelColumnNames.has(migration.name)) continue;
-			await client.execute(migration.sql);
-			console.log(
-				`[db] Columna '${migration.name}' agregada a la tabla wheel_settings.`,
-			);
-		}
-
-		// Migraciones del sistema de tickets (idempotentes, desde migrations.ts)
-		const appliedMigrations = await runMigrations(client);
+		// Migraciones del sistema de tickets (idempotentes)
+		const appliedMigrations = await runMigrations(db);
 		for (const id of appliedMigrations) {
-			console.log(`[db] MigraciÃ³n aplicada: ${id}`);
+			console.log(`[db] Migración aplicada: ${id}`);
 		}
 
-		// Auto-seed solo si la base estÃ¡ totalmente vacÃ­a.
-		const countResult = await client.execute(
+		// Auto-seed solo si la base está totalmente vacía.
+		const countResult = await db.execute(
 			"SELECT COUNT(*) AS total FROM roulettes",
 		);
 		const total = Number(countResult.rows[0]?.total ?? 0);
 
 		if (total === 0) {
 			for (const template of SEED_TEMPLATES) {
-				const inserted = await client.execute({
-					sql: "INSERT INTO roulettes (name, is_active) VALUES (?, ?)",
+				const inserted = await db.execute({
+					sql: "INSERT INTO roulettes (name, is_active) VALUES (?, ?) RETURNING id",
 					args: [template.name, template.isActive ? 1 : 0],
 				});
-				const rouletteId = Number(
-					(Array.isArray(inserted.rows) && inserted.rows.length > 0
-						? inserted.rows[0].insertId
-						: 0) ?? 0,
-				);
+				const rouletteId = Number(inserted.rows[0]?.id ?? 0);
 
 				if (template.prizes.length > 0) {
-					await client.batch(
+					await db.batch(
 						template.prizes.map((prize) => ({
 							sql:
-								"INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+								"INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 							args: [
 								rouletteId,
 								prize.name,
 								prize.backgroundColor,
 								prize.probability,
 								null,
+								"both",
 								prize.isSpinAgain ? 1 : 0,
 								prize.sectorIndex,
 							],
@@ -418,17 +334,18 @@ async function ensureInitialized(): Promise<DbClient> {
 					);
 				}
 			}
-			console.log("[db] Base vacÃ­a: plantillas iniciales creadas.");
+			console.log("[db] Base vacía: plantillas iniciales creadas.");
 		}
 
-		return client;
+		return db;
 	})();
 
 	try {
 		return await initPromise;
 	} catch (error) {
-		// Permite reintentar en la siguiente peticiÃ³n si fallÃ³ la conexiÃ³n.
+		// Permite reintentar en la siguiente petición si falló la conexión.
 		initPromise = null;
+		client = null;
 		throw error;
 	}
 }
@@ -438,8 +355,8 @@ export async function getDb(): Promise<DbClient> {
 }
 
 export async function getActiveRouletteWithPrizes(): Promise<RouletteTemplate | null> {
-	const client = await getDb();
-	const result = await client.execute({
+	const db = await getDb();
+	const result = await db.execute({
 		sql: "SELECT * FROM roulettes WHERE is_active = 1 LIMIT 1",
 		args: [],
 	});
@@ -448,7 +365,7 @@ export async function getActiveRouletteWithPrizes(): Promise<RouletteTemplate | 
 	if (!row) return null;
 
 	const roulette = mapRoulette(row);
-	const prizes = await client.execute({
+	const prizes = await db.execute({
 		sql: "SELECT * FROM prizes WHERE roulette_id = ? AND sector_index IS NOT NULL ORDER BY sector_index",
 		args: [roulette.id],
 	});
@@ -459,16 +376,16 @@ export async function getActiveRouletteWithPrizes(): Promise<RouletteTemplate | 
 }
 
 export async function getAllRoulettes(): Promise<RouletteTemplate[]> {
-	const client = await getDb();
-	const result = await client.execute("SELECT * FROM roulettes ORDER BY name");
+	const db = await getDb();
+	const result = await db.execute("SELECT * FROM roulettes ORDER BY name");
 	return result.rows.map(mapRoulette);
 }
 
 export async function getRouletteWithPrizes(
 	id: number,
 ): Promise<RouletteTemplate | null> {
-	const client = await getDb();
-	const result = await client.execute({
+	const db = await getDb();
+	const result = await db.execute({
 		sql: "SELECT * FROM roulettes WHERE id = ?",
 		args: [id],
 	});
@@ -477,7 +394,7 @@ export async function getRouletteWithPrizes(
 	if (!row) return null;
 
 	const roulette = mapRoulette(row);
-	const prizes = await client.execute({
+	const prizes = await db.execute({
 		sql: "SELECT * FROM prizes WHERE roulette_id = ? AND sector_index IS NOT NULL ORDER BY sector_index",
 		args: [id],
 	});
@@ -492,20 +409,16 @@ export async function createRoulette(
 	name: string,
 	prizes: Prize[],
 ): Promise<RouletteTemplate> {
-	const client = await getDb();
+	const db = await getDb();
 
-	const inserted = await client.execute({
-		sql: "INSERT INTO roulettes (name, is_active) VALUES (?, 0)",
+	const inserted = await db.execute({
+		sql: "INSERT INTO roulettes (name, is_active) VALUES (?, 0) RETURNING id",
 		args: [name],
 	});
-	const rouletteId = Number(
-		(Array.isArray(inserted.rows) && inserted.rows.length > 0
-			? inserted.rows[0].insertId
-			: 0) ?? 0,
-	);
+	const rouletteId = Number(inserted.rows[0]?.id ?? 0);
 
 	const sectorPrizes = normalizeSectorPrizes(rouletteId, prizes);
-	await client.batch(
+	await db.batch(
 		sectorPrizes.map((prize) => ({
 			sql: "INSERT INTO prizes (roulette_id, name, backgroundColor, probability, image, label_mode, is_spin_again, sector_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			args: [
@@ -532,7 +445,7 @@ export async function updateRoulette(
 	name: string,
 	prizes: Prize[],
 ): Promise<RouletteTemplate> {
-	const client = await getDb();
+	const db = await getDb();
 	const sectorPrizes = normalizeSectorPrizes(id, prizes);
 
 	const statements = [
@@ -559,35 +472,32 @@ export async function updateRoulette(
 		})),
 	];
 
-	await client.batch(statements, "write");
+	await db.batch(statements, "write");
 
 	const updated = await getRouletteWithPrizes(id);
 	if (!updated) throw new Error("Roulette not found");
 	return updated;
 }
 
-export async function deleteRoulette(id: number): Promise<void> {
-	const client = await getDb();
+export async function deleteRoulette(
+	id: number,
+): Promise<void> {
+	const db = await getDb();
 
-	const roulette = await client.execute({
-		sql: "SELECT * FROM roulettes WHERE id = ?",
-		args: [id],
+	const active = await db.execute({
+		sql: "SELECT * FROM roulettes WHERE is_active = 1 LIMIT 1",
+		args: [],
 	});
-	if (roulette.rows.length === 0) throw new Error("Roulette not found");
-
-	const active = await client.execute(
-		"SELECT * FROM roulettes WHERE is_active = 1 LIMIT 1",
-	);
 	if (active.rows[0] && Number(active.rows[0].id) === id) {
 		throw new Error("Cannot delete the active roulette template.");
 	}
 
-	const count = await client.execute("SELECT COUNT(*) AS cnt FROM roulettes");
+	const count = await db.execute("SELECT COUNT(*) AS cnt FROM roulettes");
 	if (Number(count.rows[0]?.cnt ?? 0) <= 1) {
 		throw new Error("Cannot delete the last roulette template.");
 	}
 
-	await client.batch(
+	await db.batch(
 		[
 			{ sql: "DELETE FROM prizes WHERE roulette_id = ?", args: [id] },
 			{ sql: "DELETE FROM roulettes WHERE id = ?", args: [id] },
@@ -597,15 +507,15 @@ export async function deleteRoulette(id: number): Promise<void> {
 }
 
 export async function setActiveRoulette(id: number): Promise<void> {
-	const client = await getDb();
+	const db = await getDb();
 
-	const exists = await client.execute({
+	const exists = await db.execute({
 		sql: "SELECT id FROM roulettes WHERE id = ?",
 		args: [id],
 	});
 	if (exists.rows.length === 0) throw new Error("Roulette not found");
 
-	const sectorResult = await client.execute({
+	const sectorResult = await db.execute({
 		sql: "SELECT sector_index FROM prizes WHERE roulette_id = ? AND sector_index IS NOT NULL",
 		args: [id],
 	});
@@ -622,7 +532,7 @@ export async function setActiveRoulette(id: number): Promise<void> {
 		);
 	}
 
-	await client.batch(
+	await db.batch(
 		[
 			{ sql: "UPDATE roulettes SET is_active = 0", args: [] },
 			{ sql: "UPDATE roulettes SET is_active = 1 WHERE id = ?", args: [id] },
@@ -635,8 +545,8 @@ export async function setActiveRoulette(id: number): Promise<void> {
 export async function getPrizeImage(id: number): Promise<string | null> {
 	if (!Number.isFinite(id)) return null;
 
-	const client = await getDb();
-	const result = await client.execute({
+	const db = await getDb();
+	const result = await db.execute({
 		sql: "SELECT image FROM prizes WHERE id = ?",
 		args: [id],
 	});
@@ -646,12 +556,12 @@ export async function getPrizeImage(id: number): Promise<string | null> {
 }
 
 /**
- * Devuelve la calibraciÃ³n global de la ruleta (fila Ãºnica id=1).
+ * Devuelve la calibración global de la ruleta (fila única id=1).
  * La tabla y su fila por defecto se crean en `ensureInitialized`.
  */
 export async function getWheelCalibration(): Promise<WheelCalibration> {
-	const client = await getDb();
-	const result = await client.execute({
+	const db = await getDb();
+	const result = await db.execute({
 		sql: "SELECT alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation FROM wheel_settings WHERE id = 1",
 		args: [],
 	});
@@ -683,22 +593,22 @@ export async function getWheelCalibration(): Promise<WheelCalibration> {
 	};
 }
 
-/** Guarda la calibraciÃ³n global de la ruleta (upsert de la fila id=1). */
+/** Guarda la calibración global de la ruleta (upsert de la fila id=1). */
 export async function saveWheelCalibration(
 	calibration: WheelCalibration,
 ): Promise<WheelCalibration> {
-	const client = await getDb();
-	await client.execute({
+	const db = await getDb();
+	await db.execute({
 		sql: `INSERT INTO wheel_settings (id, alignment_offset, initial_angle, disk_offset_x, disk_offset_y, disk_scale, disk_rotation, updated_at)
-              VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-              ON DUPLICATE KEY UPDATE
-                alignment_offset = VALUES(alignment_offset),
-                initial_angle = VALUES(initial_angle),
-                disk_offset_x = VALUES(disk_offset_x),
-                disk_offset_y = VALUES(disk_offset_y),
-                disk_scale = VALUES(disk_scale),
-                disk_rotation = VALUES(disk_rotation),
-                updated_at = VALUES(updated_at)`,
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  alignment_offset = excluded.alignment_offset,
+                  initial_angle = excluded.initial_angle,
+                  disk_offset_x = excluded.disk_offset_x,
+                  disk_offset_y = excluded.disk_offset_y,
+                  disk_scale = excluded.disk_scale,
+                  disk_rotation = excluded.disk_rotation,
+                  updated_at = excluded.updated_at`,
 		args: [
 			calibration.alignmentOffset,
 			calibration.initialAngle,

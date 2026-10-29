@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DbClient } from "../../database";
 import {
 	redeemTicket,
@@ -13,44 +13,38 @@ import { createTickets } from "../service";
 import { hashTicketToken } from "../token";
 import { createTicketsRouter } from "../router";
 import {
-	createTestClient,
+	createTestDb,
 	restoreEnv,
 	setTestEnv,
 	TEST_PASSWORD,
 	tokenFromParticipationUrl,
 } from "./helpers";
-import { router as apiRouter } from "../../app";
 
-const PRIZE = { prizeId: 7, prizeName: "CafÃ© gratis", rouletteId: 1 };
+const PRIZE = { prizeId: 7, prizeName: "Café gratis", rouletteId: 1 };
 
 describe("Fase 2: reserva y canje", () => {
 	let client: DbClient;
 	let ticketsApp: Express;
-	let spinApp: Express;
 	let saved: ReturnType<typeof setTestEnv>;
 
 	beforeEach(async () => {
 		saved = setTestEnv();
-		client = await createTestClient();
+		client = await createTestDb();
 
 		ticketsApp = express();
 		ticketsApp.use(express.json());
 		ticketsApp.use("/tickets", createTicketsRouter(async () => client));
-
-		spinApp = express();
-		spinApp.use(express.json());
-		spinApp.use("/", apiRouter);
 	});
 
 	afterEach(() => {
-		client.close();
 		restoreEnv(saved);
+		vi.restoreAllMocks();
 	});
 
 	async function newTicket(): Promise<{ token: string; hash: string; id: string }> {
 		const result = await createTickets(client, { quantity: 1 });
 		const first = result.tickets[0];
-		if (!first) throw new Error("No se creÃ³ el ticket de prueba.");
+		if (!first) throw new Error("No se creó el ticket de prueba.");
 		const token = tokenFromParticipationUrl(first.participationUrl);
 		return { token, hash: hashTicketToken(token), id: first.ticket.id };
 	}
@@ -73,7 +67,7 @@ describe("Fase 2: reserva y canje", () => {
 		expect(result.reason).toBe("not_found");
 	});
 
-	it("reserva una sola vez aunque haya dos peticiones simultÃ¡neas", async () => {
+	it("reserva una sola vez aunque haya dos peticiones simultáneas", async () => {
 		const { hash } = await newTicket();
 
 		const [first, second] = await Promise.all([
@@ -89,7 +83,7 @@ describe("Fase 2: reserva y canje", () => {
 		expect(current.valid).toBe(false);
 	});
 
-	it("no canjea un ticket que no estÃ¡ reservado", async () => {
+	it("no canjea un ticket que no está reservado", async () => {
 		const { hash } = await newTicket();
 
 		const result = await redeemTicket(client, hash, PRIZE);
@@ -125,7 +119,7 @@ describe("Fase 2: reserva y canje", () => {
 		expect(validation.reason).toBe("already_redeemed");
 	});
 
-	it("libera la reserva cuando el giro cae en IntÃ©ntalo de nuevo", async () => {
+	it("libera la reserva cuando el giro cae en Inténtalo de nuevo", async () => {
 		const { hash } = await newTicket();
 
 		const reserved = await reserveTicket(client, hash, 5);
@@ -142,7 +136,7 @@ describe("Fase 2: reserva y canje", () => {
 	it("libera una reserva vencida", async () => {
 		const { hash } = await newTicket();
 
-		// Reserva creada en el pasado: su reserved_until ya venciÃ³.
+		// Reserva creada en el pasado: su reserved_until ya venció.
 		const past = new Date(Date.now() - 10 * 60 * 1000);
 		const reserved = await reserveTicket(client, hash, 5, past);
 		expect(reserved.success).toBe(true);
@@ -156,7 +150,7 @@ describe("Fase 2: reserva y canje", () => {
 		const { hash } = await newTicket();
 
 		const past = new Date(Date.now() - 60 * 1000);
-		// El token se creÃ³ sin expiraciÃ³n; simulamos la expiraciÃ³n por fecha.
+		// El token se creó sin expiración; simulamos la expiración por fecha.
 		const rows = await client.execute({
 			sql: "UPDATE tickets SET expires_at = ? WHERE token_hash = ?",
 			args: [past.toISOString(), hash],
@@ -183,7 +177,7 @@ describe("Fase 2: reserva y canje", () => {
 		expect(blocked.reason).toBe("already_redeemed");
 	});
 
-	it("expone validate/reserve sin contraseÃ±a de operador", async () => {
+	it("expone validate/reserve sin contraseña de operador", async () => {
 		const { token } = await newTicket();
 
 		const validation = await request(ticketsApp)
@@ -203,17 +197,17 @@ describe("Fase 2: reserva y canje", () => {
 			});
 	});
 
-	it("no expone un endpoint pÃºblico para fijar el premio", async () => {
+	it("no expone un endpoint público para fijar el premio", async () => {
 		const { token } = await newTicket();
 
-		// Sin contraseÃ±a cae en el middleware de operador: no hay canje pÃºblico.
+		// Sin contraseña cae en el middleware de operador: no hay canje público.
 		await request(ticketsApp)
 			.post("/tickets/redeem")
 			.send({ token, ...PRIZE })
 			.expect(401);
 	});
 
-	it("exige la contraseÃ±a de operador para anular", async () => {
+	it("exige la contraseña de operador para anular", async () => {
 		const { id } = await newTicket();
 
 		await request(ticketsApp).post(`/tickets/${id}/void`).expect(401);
@@ -226,6 +220,28 @@ describe("Fase 2: reserva y canje", () => {
 	});
 
 	it("el giro exige un token de ticket", async () => {
+		// Mock the database to return a valid roulette for this test
+		const { router: apiRouter } = await import("../../app");
+		const { getActiveRouletteWithPrizes } = await import("../../database");
+		
+		vi.spyOn(await import("../../database"), "getActiveRouletteWithPrizes").mockResolvedValue({
+			id: 1,
+			name: "Test",
+			is_active: true,
+			prizes: [
+				{ id: 1, roulette_id: 1, name: "Premio 1", backgroundColor: "#0A4E58", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 0 },
+				{ id: 2, roulette_id: 1, name: "Premio 2", backgroundColor: "#00767C", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 1 },
+				{ id: 3, roulette_id: 1, name: "Premio 3", backgroundColor: "#008087", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 2 },
+				{ id: 4, roulette_id: 1, name: "Premio 4", backgroundColor: "#1C7C54", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 3 },
+				{ id: 5, roulette_id: 1, name: "Premio 5", backgroundColor: "#2E8B57", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 4 },
+				{ id: 6, roulette_id: 1, name: "Premio 6", backgroundColor: "#4A7C3F", probability: 10, image: null, imageUrl: null, labelMode: "both", isSpinAgain: false, sectorIndex: 5 },
+			],
+		});
+
+		const spinApp = express();
+		spinApp.use(express.json());
+		spinApp.use("/", apiRouter);
+
 		const response = await request(spinApp).post("/spin").send({}).expect(400);
 		expect(response.body.message).toContain("Token");
 	});

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DbClient } from "../../database";
 import { createTicketsRouter } from "../router";
 import {
-	createTestClient,
+	createTestDb,
 	restoreEnv,
 	setTestEnv,
 	TEST_PASSWORD,
@@ -17,18 +17,17 @@ describe("API de tickets", () => {
 
 	beforeEach(async () => {
 		saved = setTestEnv();
-		client = await createTestClient();
+		client = await createTestDb();
 		app = express();
 		app.use(express.json());
 		app.use("/tickets", createTicketsRouter(async () => client));
 	});
 
 	afterEach(() => {
-		client.close();
 		restoreEnv(saved);
 	});
 
-	it("exige la contraseÃ±a de operador", async () => {
+	it("exige la contraseña de operador", async () => {
 		await request(app).post("/tickets").send({}).expect(401);
 		await request(app)
 			.post("/tickets")
@@ -37,7 +36,7 @@ describe("API de tickets", () => {
 			.expect(401);
 	});
 
-	it("responde 503 si OPERATOR_PASSWORD no estÃ¡ configurada", async () => {
+	it("responde 503 si OPERATOR_PASSWORD no está configurada", async () => {
 		delete process.env.OPERATOR_PASSWORD;
 
 		const response = await request(app)
@@ -84,7 +83,7 @@ describe("API de tickets", () => {
 		expect(JSON.stringify(response.body.tickets)).not.toContain("token_hash");
 	});
 
-	it("valida cantidad y expiraciÃ³n", async () => {
+	it("valida cantidad y expiración", async () => {
 		await request(app)
 			.post("/tickets/batch")
 			.set("X-Operator-Password", TEST_PASSWORD)

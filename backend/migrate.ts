@@ -9,24 +9,24 @@ import { runMigrations } from "./migrations";
 import { getDb } from "./database";
 
 async function main() {
-	console.log("🔄 Aplicando migraciones...");
+	console.log("?? Aplicando migraciones...");
 
 	const client = await getDb();
 
 	const applied = await runMigrations(client);
 
 	if (applied.length === 0) {
-		console.log("✅ La base de datos ya está al día.");
+		console.log("? La base de datos ya est� al d�a.");
 	} else {
 		for (const id of applied) {
-			console.log(`✅ Migración aplicada: ${id}`);
+			console.log(`? Migraci�n aplicada: ${id}`);
 		}
 	}
 }
 
 main().catch((error) => {
 	console.error(
-		"❌ Error al aplicar migraciones:",
+		"? Error al aplicar migraciones:",
 		error instanceof Error ? error.message : "desconocido",
 	);
 	process.exit(1);

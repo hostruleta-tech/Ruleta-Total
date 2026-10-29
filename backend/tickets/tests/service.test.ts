@@ -1,4 +1,4 @@
-﻿import jsQR from "jsqr";
+import jsQR from "jsqr";
 import JSZip from "jszip";
 import { PNG } from "pngjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ import {
 import { hashTicketToken } from "../token";
 import { effectiveStatus, type Ticket } from "../types";
 import {
-	createTestClient,
+	createTestDb,
 	restoreEnv,
 	setTestEnv,
 	tokenFromParticipationUrl,
@@ -45,11 +45,10 @@ describe("persistencia de tickets", () => {
 
 	beforeEach(async () => {
 		saved = setTestEnv();
-		client = await createTestClient();
+		client = await createTestDb();
 	});
 
 	afterEach(() => {
-		client.close();
 		restoreEnv(saved);
 	});
 
@@ -111,7 +110,7 @@ describe("persistencia de tickets", () => {
 			client.execute({
 				sql: `INSERT INTO tickets
               (id, batch_id, token_hash, token_encrypted, status, created_at)
-              VALUES (?, ?, ?, ?, 'available', ?)`,
+              VALUES (?, ?, ?, ?, "available", ?)`,
 				args: [
 					"ticket-duplicado",
 					null,
@@ -257,7 +256,7 @@ describe("persistencia de tickets", () => {
 		expect(batch?.quantity).toBe(2);
 	});
 
-	it("devuelve 404 lÃ³gico si el lote no existe", async () => {
+	it("devuelve 404 l�gico si el lote no existe", async () => {
 		await expect(getBatchDetail(client, "no-existe")).rejects.toThrow(
 			TicketNotFoundError,
 		);
