@@ -14,7 +14,7 @@
  */
 
 /** URL pública del disco (en `public/`). */
-export const WHEEL_IMAGE_URL = "/ruleta-disco-v3.png";
+export const WHEEL_IMAGE_URL = "/ruleta-disco.png";
 
 /** URL pública del centro (en `public/`). */
 export const CENTER_IMAGE_URL = "/ruleta-centro-v2.png";
