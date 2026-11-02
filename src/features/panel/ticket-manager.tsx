@@ -643,8 +643,8 @@ export function TicketManager() {
 						className="mt-4 space-y-4"
 					>
 						<div className="grid grid-cols-2 gap-3">
-							<div className="grid gap-1.5">
-								<BrandLabel htmlFor="ticket-quantity">Cantidad</BrandLabel>
+							<div className="grid gap-1.5 min-w-0">
+                                <BrandLabel htmlFor="ticket-quantity">Cantidad</BrandLabel>
 								<div className="flex items-center gap-2">
 									<button
 										type="button"
@@ -670,7 +670,7 @@ export function TicketManager() {
 											const val = Number(event.target.value);
 											if (!Number.isNaN(val)) setQuantity(Math.max(1, Math.min(MAX_BATCH_SIZE, val)));
 										}}
-										className="flex-1 text-center font-mono text-lg"
+										className="flex-1 text-center font-mono text-lg min-w-0"
 									/>
 									<button
 										type="button"
@@ -689,36 +689,36 @@ export function TicketManager() {
 								<p className="text-[10px] text-slate-400 text-center">Máx. {MAX_BATCH_SIZE}</p>
 							</div>
 
-							<div className="grid gap-1.5">
-								<BrandLabel htmlFor="ticket-expiry">Vence (opcional)</BrandLabel>
-								<div className="relative">
-									<Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-									<BrandInput
-										id="ticket-expiry"
+							<div className="grid gap-1.5 min-w-0">
+                                <BrandLabel htmlFor="ticket-expiry">Vence (opcional)</BrandLabel>
+								<div className="relative min-w-0">
+                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                                    <BrandInput
+                                        id="ticket-expiry"
 										type="datetime-local"
 										min={minExpiry}
 										value={expiresAt}
 										onChange={(event) => setExpiresAt(event.target.value)}
-										className="pl-10"
-									/>
-								</div>
-							</div>
-						</div>
+										className="pl-10 min-w-0"
+                                    />
+                                </div>
+                            </div>
+                        </div>
 
-						<div className="grid gap-1.5">
-							<BrandLabel htmlFor="ticket-label">Etiqueta del lote</BrandLabel>
-							<div className="relative">
-								<Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-								<BrandInput
-									id="ticket-label"
+                        <div className="grid gap-1.5">
+                            <BrandLabel htmlFor="ticket-label">Etiqueta del lote</BrandLabel>
+							<div className="relative min-w-0">
+                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                                <BrandInput
+                                    id="ticket-label"
 									type="text"
 									maxLength={80}
 									placeholder="Ej. Tienda Centro - Octubre"
 									value={label}
 									onChange={(event) => setLabel(event.target.value)}
-									className="pl-10"
-								/>
-								{label && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">{label.length}/80</span>}
+									className="pl-10 pr-10 min-w-0"
+                                />
+                                {label && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">{label.length}/80</span>}
 							</div>
 						</div>
 
