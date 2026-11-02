@@ -10,7 +10,7 @@
     "backend": {
       "root": "backend",
       "framework": "express",
-      "buildCommand": "npm run build && npm run build:vercel",
+      "buildCommand": "npm run build",
       "entrypoint": "dist/vercel.js"
     }
   },

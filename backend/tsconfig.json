@@ -9,5 +9,6 @@
     "skipLibCheck": true
   },
   "include": ["./**/*.ts"],
+  "files": ["vercel.ts"],
   "exclude": ["node_modules", "dist", "tickets/tests", "**/*.test.ts"]
 }
