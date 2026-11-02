@@ -765,6 +765,12 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	const [diskState, setDiskState] = useState<"loading" | "ok" | "error">(
 		"loading",
 	);
+	// Evitar flash: mantener loading mínimo 200ms para que no se vea el spinner parpadear en conexiones rápidas
+	const [showLoading, setShowLoading] = useState(true);
+	useEffect(() => {
+		const timer = setTimeout(() => setShowLoading(false), 200);
+		return () => clearTimeout(timer);
+	}, []);
 	// Rotación usada por el overlay debug (evita re-renderizar en producción).
 	const [debugRotation, setDebugRotation] = useState(WHEEL_INITIAL_ANGLE);
 	// Modo debug: solo se activa con ?wheelDebug=1 Y sesión de operador.
@@ -955,8 +961,7 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
 	}, [syncDiskRotation, initialAngle]);
 
 	// Canvas visible: respaldo si el PNG falla, o detrás del PNG en calibración.
-	const canvasVisible =
-		diskState !== "ok" || (debugMode && showCanvas);
+	const canvasVisible = diskState === "error" || (debugMode && showCanvas);
 
 	return (
 		<div
