@@ -9,8 +9,7 @@
     },
     "backend": {
       "root": "backend",
-      "framework": "express",
-      "buildCommand": "npm run build && ls -la dist/ && test -f dist/vercel.js && echo 'vercel.js found'",
+      "buildCommand": "pwd && ls -la && npm run build && ls -la dist/ && test -f dist/vercel.js && echo 'vercel.js found'",
       "entrypoint": "dist/vercel.js"
     }
   },
