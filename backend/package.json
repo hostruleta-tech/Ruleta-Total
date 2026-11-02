@@ -4,6 +4,7 @@
 	"main": "dist/server.js",
 	"scripts": {
 		"build": "tsc",
+		"build:vercel": "tsc vercel.ts --outDir dist --target ES2020 --module commonjs --esModuleInterop --strict --skipLibCheck",
 		"dev": "tsx watch server.ts",
 		"start": "node dist/server.js",
 		"clean": "rimraf dist"
